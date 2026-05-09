@@ -1,0 +1,61 @@
+# ATSC 3.0 TLV multiplex packet (the simplest TLV in the stack).
+# Spec: ATSC A/330 Annex A — TLV packet structure for IP-level multiplexing.
+#
+# Wire format (big-endian, no padding):
+#   +--------+--------+--------+----------------------+
+#   | type 8 |    length 16    |  payload (length B)  |
+#   +--------+--------+--------+----------------------+
+#
+# This is the canonical "first protocol" for the codegen pipeline because it
+# has no nesting, no bit-packed sub-fields, and no conditional decoding —
+# pure type/length/value.
+
+protocol:
+  name: tlv_mux
+  proto_id: 2
+  spec: "ATSC A/330 Annex A"
+  description: "TLV multiplex packet (8-bit packet_type, 16-bit length, opaque payload)"
+
+enums:
+  packet_type:
+    UNDEFINED:      0x00
+    IPV4:           0x01
+    IPV6:           0x02
+    COMPRESSED_IP:  0x03
+    SIGNALING:      0xFE
+    NULL_PKT:       0xFF
+
+header:
+  total_bits: 24       # 8 + 16
+  fields:
+    - { name: packet_type,   bit_offset: 0,  bit_width: 8,  type: enum, enum: packet_type }
+    - { name: packet_length, bit_offset: 8,  bit_width: 16, type: uint }
+
+payload:
+  length_field: packet_length
+  kind: opaque
+
+fixtures:
+  - name: ipv4_minimal
+    description: "IPv4 packet type, 4-byte payload (DEADBEEF)"
+    raw_hex: "01 00 04 DE AD BE EF"
+    expected:
+      packet_type: IPV4
+      packet_length: 4
+      payload_hex: "DEADBEEF"
+
+  - name: null_packet
+    description: "Null packet, no payload"
+    raw_hex: "FF 00 00"
+    expected:
+      packet_type: NULL_PKT
+      packet_length: 0
+      payload_hex: ""
+
+  - name: signaling_packet
+    description: "Signaling packet with 8-byte payload"
+    raw_hex: "FE 00 08 00 11 22 33 44 55 66 77"
+    expected:
+      packet_type: SIGNALING
+      packet_length: 8
+      payload_hex: "0011223344556677"

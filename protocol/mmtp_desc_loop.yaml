@@ -1,0 +1,72 @@
+# MMTP descriptor loop — a length-prefixed sequence of MMTP descriptors.
+# Spec: ATSC A/331 Annex A.5 (`descriptor_loop_length` pattern, used in
+# tables like MP_table, AL-FEC_message, and many MMT signaling messages).
+#
+# Wire format (big-endian, no padding):
+#   +-----------------+-----------------------------------------+
+#   | loop_length 16  |  loop_length bytes of mmtp_desc records |
+#   +-----------------+-----------------------------------------+
+#
+# This is the canonical first example of M6's `repeated:` block:
+#
+#   repeated:
+#     length_field: <name of header field; gives loop length in BYTES>
+#     element:      <name of another protocol in this map>
+#
+# The decoded representation drops the per-element raw payload span on the
+# parent in favor of a `std::vector<atsc3::<element>::decoded_t> elements`
+# member. The encoder derives `loop_length` from the encoded element bytes
+# (callers may leave the field at 0; if non-zero, it must match).
+
+protocol:
+  name: mmtp_desc_loop
+  proto_id: 4
+  spec: "ATSC A/331 Annex A.5"
+  description: "Length-prefixed MMTP descriptor loop"
+
+header:
+  total_bits: 16
+  fields:
+    - { name: loop_length, bit_offset: 0, bit_width: 16, type: uint }
+
+repeated:
+  length_field: loop_length
+  element: mmtp_desc
+
+fixtures:
+  - name: empty_loop
+    description: "Zero descriptors"
+    raw_hex: "00 00"
+    expected:
+      loop_length: 0
+      elements: []
+
+  - name: single_small_desc
+    description: "One descriptor (tag=0x10, 4-byte payload). loop_length = 6."
+    raw_hex: "00 06 10 04 DE AD BE EF"
+    expected:
+      loop_length: 6
+      elements:
+        - descriptor_tag: 16
+          descriptor_length: 4
+          payload_hex: "DEADBEEF"
+
+  - name: three_descs_mixed
+    description: "Three descriptors of varying sizes; loop_length = 18"
+    raw_hex: >
+      00 12
+      05 00
+      10 04 DE AD BE EF
+      FF 08 00 11 22 33 44 55 66 77
+    expected:
+      loop_length: 18
+      elements:
+        - descriptor_tag: 5
+          descriptor_length: 0
+          payload_hex: ""
+        - descriptor_tag: 16
+          descriptor_length: 4
+          payload_hex: "DEADBEEF"
+        - descriptor_tag: 255
+          descriptor_length: 8
+          payload_hex: "0011223344556677"

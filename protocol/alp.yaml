@@ -1,0 +1,77 @@
+# ATSC 3.0 ALP (ATSC Link-Layer Protocol) base header.
+# Spec: ATSC A/330 §5.2.
+#
+# Base header (16 bits, MSB-first bit ordering):
+#   +-----+---+---+----------------+
+#   | typ |pc | hm |  length(11b)  |
+#   |  3  | 1 | 1  |               |
+#   +-----+---+---+----------------+
+#
+# Where:
+#   typ = packet_type
+#   pc  = payload_configuration (0 = single packet, 1 = concatenation/segmentation)
+#   hm  = header_mode (0 = short, 1 = long; toggles additional-header presence)
+#
+# M2 covers the base header only. ALP additional headers (TLV-style
+# segmentation/concatenation/sub-stream-ID extensions) are deferred to a
+# later iteration — this is enough to validate bit-field codegen end-to-end.
+
+protocol:
+  name: alp
+  proto_id: 1
+  spec: "ATSC A/330 §5.2"
+  description: "ALP base header (16 bits) + opaque payload"
+
+enums:
+  packet_type:
+    IPV4:                  0x0
+    COMPRESSED_IPV4:       0x1
+    LINK_LAYER_SIGNALING:  0x4
+    PACKET_TYPE_EXTENSION: 0x6
+    MPEG2_TS:              0x7
+
+header:
+  total_bits: 16
+  fields:
+    - { name: packet_type,    bit_offset: 0,  bit_width: 3,  type: enum, enum: packet_type }
+    - { name: payload_config, bit_offset: 3,  bit_width: 1,  type: bool }
+    - { name: header_mode,    bit_offset: 4,  bit_width: 1,  type: bool }
+    - { name: payload_length, bit_offset: 5,  bit_width: 11, type: uint }
+
+payload:
+  length_field: payload_length
+  kind: opaque
+
+fixtures:
+  - name: extension_14b
+    description: "PACKET_TYPE_EXTENSION (6), pc=0, hm=0, len=14"
+    # 11000000_00001110 = C0 0E
+    raw_hex: "C0 0E 00 11 22 33 44 55 66 77 88 99 AA BB CC DD"
+    expected:
+      packet_type: PACKET_TYPE_EXTENSION
+      payload_config: false
+      header_mode: false
+      payload_length: 14
+      payload_hex: "00112233445566778899AABBCCDD"
+
+  - name: ipv4_zero_len
+    description: "IPv4 (0), pc=0, hm=0, len=0"
+    # 00000000_00000000 = 00 00
+    raw_hex: "00 00"
+    expected:
+      packet_type: IPV4
+      payload_config: false
+      header_mode: false
+      payload_length: 0
+      payload_hex: ""
+
+  - name: mpeg2ts_7b
+    description: "MPEG2_TS (7), pc=1, hm=1, len=7"
+    # 11111000_00000111 = F8 07
+    raw_hex: "F8 07 11 22 33 44 55 66 77"
+    expected:
+      packet_type: MPEG2_TS
+      payload_config: true
+      header_mode: true
+      payload_length: 7
+      payload_hex: "11223344556677"

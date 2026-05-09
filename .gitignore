@@ -1,0 +1,18 @@
+build/
+*.o
+*.a
+*.so
+*.dylib
+.cache/
+compile_commands.json
+lib/generated/*
+!lib/generated/.gitkeep
+
+# Docker workflow scratch (Makefile dependency stamps)
+.make/
+
+# macOS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

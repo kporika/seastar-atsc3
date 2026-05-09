@@ -1,0 +1,4 @@
+[submodule "seastar"]
+	path = seastar
+	url = https://github.com/scylladb/seastar
+	branch = seastar-25.05.0

@@ -1,0 +1,118 @@
+# =============================================================================
+# Dockerfile.deps — build-time dependencies for atsc3_proto.
+#
+# Produces a Debian 12 image with Seastar 25.05.0 installed under /usr,
+# plus the toolchain + libraries required by atsc3_proto's CMake build,
+# YAML→C++ codegen, and python smoke tests. Build it once; consume it
+# as the base image for `make build` / `./build.sh`.
+#
+#   Build:    docker build -f Dockerfile.deps -t atsc3-deps .
+#   Use:      docker run --rm -it -v "$PWD":/work -w /work atsc3-deps
+#             # inside the container:
+#             $ ./build.sh
+#             $ ctest --test-dir build --output-on-failure
+#
+# Override Seastar version or the parallel job count at build time:
+#   docker build -f Dockerfile.deps -t atsc3-deps \
+#       --build-arg SEASTAR_VERSION=seastar-25.05.0 \
+#       --build-arg MAKE_JOBS=8 .
+#
+# Footprint: this image intentionally ships only the libraries that
+# atsc3_proto's static binary actually links against (Seastar + its
+# transitive deps + RapidJSON + python codegen tooling). Add new
+# packages here only when a new component genuinely needs them.
+# =============================================================================
+FROM debian:12-slim AS deps
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG SEASTAR_VERSION=seastar-25.05.0
+# Cap parallel compile jobs so Seastar template instantiation doesn't OOM
+# mid-build on smaller hosts. Seastar peaks at ~1 GiB RSS per g++ job;
+# the default 8 fits comfortably on a 16 GiB host. Use 4 if memory-bound.
+ARG MAKE_JOBS=8
+
+# -----------------------------------------------------------------------------
+# System packages — kept to the minimum atsc3_proto + Seastar require.
+# -----------------------------------------------------------------------------
+RUN apt-get -y update && apt-get -y install \
+        build-essential \
+        cmake \
+        ninja-build \
+        pkg-config \
+        dpkg-dev \
+        ragel \
+        git \
+        wget \
+        ca-certificates \
+        gdb \
+        valgrind \
+        libboost-all-dev \
+        libhwloc-dev \
+        libnuma-dev \
+        libpciaccess-dev \
+        libcrypto++-dev \
+        libgnutls28-dev \
+        libssl-dev \
+        libsctp-dev \
+        libaio-dev \
+        liburing-dev \
+        libfmt-dev \
+        libyaml-cpp-dev \
+        libc-ares-dev \
+        libunwind-dev \
+        liblz4-dev \
+        libprotobuf-dev \
+        protobuf-compiler \
+        xfsprogs \
+        xfslibs-dev \
+        rapidjson-dev \
+        python3 \
+        python3-pip \
+        python3-yaml \
+        python3-jinja2 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Seastar's pkg-config expects libcares-seastar.so; create the symlink.
+# Arch-portable: dpkg-architecture resolves to the right multiarch triple
+# (x86_64-linux-gnu on amd64, aarch64-linux-gnu on arm64, ...).
+RUN ARCH_TRIPLE="$(dpkg-architecture -qDEB_HOST_MULTIARCH)" && \
+    cd "/usr/lib/${ARCH_TRIPLE}" && \
+    ln -sf libcares.so.2 libcares-seastar.so
+
+# -----------------------------------------------------------------------------
+# Build + install Seastar from source, pinned to ${SEASTAR_VERSION}.
+# DPDK, demos, tests, and apps are disabled — atsc3_proto links the core
+# Seastar runtime only.
+# -----------------------------------------------------------------------------
+RUN git clone --depth 1 --branch ${SEASTAR_VERSION} \
+        https://github.com/scylladb/seastar.git /tmp/seastar && \
+    cd /tmp/seastar && \
+    git submodule update --init --recursive && \
+    mkdir -p build/release && cd build/release && \
+    cmake ../.. -G Ninja \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_CXX_STANDARD=20 \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DSeastar_DOCS=OFF \
+        -DSeastar_DEMOS=OFF \
+        -DSeastar_TESTING=OFF \
+        -DSeastar_APPS=OFF \
+        -DSeastar_DPDK=OFF && \
+    ninja -j${MAKE_JOBS} && \
+    ninja install && \
+    ldconfig && \
+    rm -rf /tmp/seastar
+
+# Both multiarch dirs are listed so the same image resolves pkg-config files
+# correctly on amd64 and arm64 hosts; pkg-config silently skips missing dirs.
+ENV PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+
+RUN echo "=== atsc3-deps ready ===" && \
+    pkg-config --modversion seastar && \
+    cmake --version | head -n1 && \
+    python3 --version && \
+    python3 -c "import yaml, jinja2; print('yaml=' + yaml.__version__, 'jinja2=' + jinja2.__version__)"
+
+CMD ["/bin/bash"]

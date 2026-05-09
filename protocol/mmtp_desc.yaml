@@ -1,0 +1,54 @@
+# MMTP descriptor — generic leaf TLV used inside MMT signaling tables.
+# Spec: ATSC A/331 Annex A.5 — descriptor structure for MMT signaling messages.
+#
+# Wire format (big-endian, no padding):
+#   +--------+--------+----------------------+
+#   | tag 8  | len 8  |  payload (len B)     |
+#   +--------+--------+----------------------+
+#
+# This is a leaf protocol — codegen emits the standard payload-style
+# decoder/encoder/tojson/fromjson and a single fixtures_test executable.
+#
+# It is intended to be referenced from a *parent* protocol via the M6
+# `repeated:` block, e.g. protocol/mmtp_desc_loop.yaml.
+
+protocol:
+  name: mmtp_desc
+  proto_id: 3
+  spec: "ATSC A/331 Annex A.5"
+  description: "MMTP descriptor (8-bit tag, 8-bit length, opaque payload)"
+
+header:
+  total_bits: 16            # 8 + 8
+  fields:
+    - { name: descriptor_tag,    bit_offset: 0, bit_width: 8, type: uint }
+    - { name: descriptor_length, bit_offset: 8, bit_width: 8, type: uint }
+
+payload:
+  length_field: descriptor_length
+  kind: opaque
+
+fixtures:
+  - name: empty_desc
+    description: "tag=0x05, length=0"
+    raw_hex: "05 00"
+    expected:
+      descriptor_tag: 5
+      descriptor_length: 0
+      payload_hex: ""
+
+  - name: small_desc
+    description: "tag=0x10, 4-byte payload"
+    raw_hex: "10 04 DE AD BE EF"
+    expected:
+      descriptor_tag: 16
+      descriptor_length: 4
+      payload_hex: "DEADBEEF"
+
+  - name: max_desc
+    description: "tag=0xFF, 8-byte payload"
+    raw_hex: "FF 08 00 11 22 33 44 55 66 77"
+    expected:
+      descriptor_tag: 255
+      descriptor_length: 8
+      payload_hex: "0011223344556677"

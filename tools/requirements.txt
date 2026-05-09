@@ -1,0 +1,11 @@
+# atsc3_proto codegen Python deps. Install with:
+#   python3 -m pip install -r tools/requirements.txt
+#
+# Debian/Ubuntu equivalent:
+#   apt-get install python3-yaml python3-jinja2
+#
+# These are pre-installed in the atsc3-deps Docker image
+# (see ../Dockerfile.deps).
+
+PyYAML>=6.0
+Jinja2>=3.1

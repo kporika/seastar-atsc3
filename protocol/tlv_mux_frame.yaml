@@ -1,0 +1,97 @@
+# TLV-mux carriage frame — synthetic wrapper that exercises the codegen's
+# `repeated:` (nested) feature against the existing tlv_mux protocol.
+#
+# Wire format (big-endian, no padding):
+#
+#   +--------+--------+----------------+--------------------------+
+#   | ver 8  | rsv 8  |  body_length 16|  body_length bytes of    |
+#   |        |        |                |  concatenated tlv_mux    |
+#   |        |        |                |  packets                 |
+#   +--------+--------+----------------+--------------------------+
+#
+# Why this exists:
+#   ATSC A/330 Annex A defines the TLV multiplex packet but leaves the
+#   framing of multiple packets to the underlying physical/link layer
+#   (BBP). This wrapper is a deliberately minimal synthetic header used
+#   to demonstrate and round-trip-test the codec's `repeated:` block
+#   against a real inner protocol (`tlv_mux`). It is not part of any
+#   ATSC standard.
+#
+# Rules enforced by the generated decoder/encoder:
+#   * The body is exactly `body_length` bytes long.
+#   * The body parses as 0..N concatenated tlv_mux packets and the
+#     element loop must consume exactly `body_length` bytes.
+#   * On encode, `body_length` must equal the sum of encoded element
+#     sizes, or be 0 to signal "auto-derive".
+
+protocol:
+  name: tlv_mux_frame
+  proto_id: 5
+  spec: "ATSC A/330 Annex A (synthetic TLV-mux carriage wrapper)"
+  description: "Header (ver, rsv, body_length) + N concatenated tlv_mux packets"
+
+header:
+  total_bits: 32       # 8 + 8 + 16
+  fields:
+    - { name: version,     bit_offset: 0,  bit_width: 8,  type: uint }
+    - { name: reserved,    bit_offset: 8,  bit_width: 8,  type: uint }
+    - { name: body_length, bit_offset: 16, bit_width: 16, type: uint }
+
+repeated:
+  length_field: body_length
+  element: tlv_mux
+
+fixtures:
+  - name: empty_frame
+    description: "Header only, no inner TLV-mux packets"
+    # ver=01, rsv=00, body_length=0000
+    raw_hex: "01 00 0000"
+    expected:
+      version: 1
+      reserved: 0
+      body_length: 0
+      elements: []
+
+  - name: single_ipv4
+    description: "One inner TLV-mux IPv4 packet (4-byte payload)"
+    # header (4B) + ipv4 packet (3B header + 4B payload = 7B)
+    # body_length = 0007
+    raw_hex: "01 00 0007  01 00 04 DE AD BE EF"
+    expected:
+      version: 1
+      reserved: 0
+      body_length: 7
+      elements:
+        - { packet_type: IPV4, packet_length: 4, payload_hex: "DEADBEEF" }
+
+  - name: ipv4_then_null
+    description: "IPv4 (4B body) followed by NULL packet (0B body)"
+    # header (4B) + ipv4 (3+4 = 7B) + null (3+0 = 3B) = 4 + 10
+    # body_length = 000A
+    raw_hex: "02 00 000A  01 00 04 DE AD BE EF  FF 00 00"
+    expected:
+      version: 2
+      reserved: 0
+      body_length: 10
+      elements:
+        - { packet_type: IPV4,     packet_length: 4, payload_hex: "DEADBEEF" }
+        - { packet_type: NULL_PKT, packet_length: 0, payload_hex: "" }
+
+  - name: three_signaling
+    description: "Three back-to-back SIGNALING packets, varied payload lengths"
+    # tlv_mux header is 3B, payloads are 1/2/3 bytes
+    # frame header (4B) + 3 packets ((3+1)+(3+2)+(3+3)) = 4 + 4+5+6 = 4 + 15
+    # body_length = 000F
+    raw_hex: |
+      03 00 000F
+      FE 00 01 AA
+      FE 00 02 BB CC
+      FE 00 03 DD EE FF
+    expected:
+      version: 3
+      reserved: 0
+      body_length: 15
+      elements:
+        - { packet_type: SIGNALING, packet_length: 1, payload_hex: "AA" }
+        - { packet_type: SIGNALING, packet_length: 2, payload_hex: "BBCC" }
+        - { packet_type: SIGNALING, packet_length: 3, payload_hex: "DDEEFF" }
