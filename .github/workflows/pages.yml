@@ -61,6 +61,13 @@ jobs:
 
             - name: Configure Pages
               uses: actions/configure-pages@v5
+              with:
+                  # Auto-enable Pages on first run so we don't have to flip
+                  # the Source dropdown in repo Settings → Pages by hand.
+                  # Requires the workflow's `pages: write` permission (already
+                  # granted at job-set scope above) and admin on the repo
+                  # (GITHUB_TOKEN has that for self-hosted org/personal repos).
+                  enablement: true
 
             - name: Upload Pages artifact
               uses: actions/upload-pages-artifact@v3
