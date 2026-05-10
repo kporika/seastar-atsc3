@@ -366,3 +366,12 @@ flag-driven optional sections, and richer enum types.
   `<name>_fixtures_test` CTest binary; hand-written tests live in
   `tests/`. Both classes are picked up automatically by
   `tests/CMakeLists.txt`.
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE) for the full text.
+
+All first-party source files carry an `SPDX-License-Identifier:
+Apache-2.0` tag in their header so toolchain-level license scanners
+(REUSE, scancode, ...) classify the project correctly without parsing
+file-level boilerplate.
