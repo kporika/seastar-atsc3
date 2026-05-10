@@ -23,7 +23,11 @@ image.
 > [`docs/END_TO_END_GAPS.md`](./docs/END_TO_END_GAPS.md) for a full
 > inventory of every protocol-level component between an operator API and
 > the RF exciter, with status, ATSC/IETF spec citations, and a recommended
-> build order.
+> build order. The same content is published as a live single-page app at
+> **https://kporika.github.io/seastar-atsc3/** — sources under
+> [`webapp/`](./webapp/), built and deployed by
+> [`.github/workflows/pages.yml`](./.github/workflows/pages.yml) on every
+> push to `main`.
 
 ## Layout
 
@@ -74,6 +78,9 @@ atsc3_proto/
 ├── docs/                      # architecture notes + gap analyses
 │   ├── END_TO_END_GAPS.md     #   full inventory: input API → RF exciter
 │   └── end_to_end_gaps.canvas.tsx  # Cursor-canvas rendering of the same
+├── webapp/                    # SPA mirror of the gap-analysis canvas
+│   └── src/                   #   built + deployed to GitHub Pages
+├── .github/workflows/pages.yml # Pages CI: build webapp/, publish on push
 ├── seastar/                   # git submodule, pinned to seastar-25.05.0
 ├── Dockerfile.deps            # base image: Seastar + transitive build deps
 ├── Dockerfile.app             # builder + slim runtime image (atsc3-proto)

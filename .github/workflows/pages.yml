@@ -1,0 +1,78 @@
+# =============================================================================
+# Build webapp/ and deploy to GitHub Pages on every push to main.
+#
+# Final URL is published as the `url` output of the deploy job and shown on
+# the Actions run summary. For repo `kporika/seastar-atsc3` the canonical
+# Pages URL is https://kporika.github.io/seastar-atsc3/ — this matches the
+# `base: '/seastar-atsc3/'` constant baked into webapp/vite.config.ts.
+#
+# To activate:
+#   1. Push this workflow to main (already done if you're reading this).
+#   2. In repo Settings → Pages, set "Source" = "GitHub Actions".
+#   3. The next push to main (or a manual workflow_dispatch) will build and
+#      deploy. The first deploy creates the github-pages environment.
+#
+# The workflow does *not* try to build C++ or run ctest — that's the job of
+# the Docker workflow + Dockerfile.app. This file is webapp-only.
+# =============================================================================
+
+name: Deploy webapp to GitHub Pages
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "webapp/**"
+            - ".github/workflows/pages.yml"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+# One in-flight Pages deploy at a time; queue (don't cancel) so a fast follow
+# push doesn't drop a deploy artifact while it's mid-publish.
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: webapp
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: "npm"
+                  cache-dependency-path: webapp/package-lock.json
+
+            - name: Install deps (npm ci)
+              run: npm ci --no-audit --no-fund
+
+            - name: Build (tsc + vite)
+              run: npm run build
+
+            - name: Configure Pages
+              uses: actions/configure-pages@v5
+
+            - name: Upload Pages artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: webapp/dist
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - id: deployment
+              uses: actions/deploy-pages@v4

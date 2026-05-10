@@ -9,6 +9,7 @@ versioned alongside the code so they stay in sync as milestones land.
 |---|---|---|
 | [`END_TO_END_GAPS.md`](./END_TO_END_GAPS.md) | Markdown | Inventory of every protocol-level component between operator input and the RF exciter, with status, ATSC/IETF spec citations, and a recommended build order. Renders cleanly on GitHub. |
 | [`end_to_end_gaps.canvas.tsx`](./end_to_end_gaps.canvas.tsx) | Cursor canvas | Interactive React rendering of the same gap analysis (status pills, sortable table, milestone cards). |
+| [`../webapp/`](../webapp/) | Vite + React SPA | Public web rendering of the same content, served at **https://kporika.github.io/seastar-atsc3/** via `.github/workflows/pages.yml`. The webapp's `src/pages/EndToEndGaps.tsx` is a near-verbatim port of the canvas — keep them in sync. |
 
 ## Viewing the canvas in Cursor
 
@@ -33,7 +34,17 @@ in sync with the live one.
 
 ## Editing convention
 
-Both files are derived from the same data set. When you change one, change
-the other so the markdown rendering and the canvas stay in sync. The
-canvas is the source of truth for layout; the markdown is the source of
-truth for prose.
+All three artifacts are derived from the same data set. When you update
+one, update the others so the markdown rendering, the canvas, and the
+public SPA stay in sync:
+
+- The **canvas** (`end_to_end_gaps.canvas.tsx`) is the source of truth
+  for layout — it carries the curated component-by-component data tables.
+- The **markdown** (`END_TO_END_GAPS.md`) is the source of truth for
+  prose intended to be browsed on GitHub.
+- The **SPA** (`../webapp/src/pages/EndToEndGaps.tsx`) is a near-verbatim
+  port of the canvas; the only deltas are the imports
+  (`./canvas-primitives` instead of `cursor/canvas`) and a few
+  `useHostTheme()`-driven inline styles converted to CSS classes. After
+  editing the canvas, run a 3-way diff against the SPA and apply the
+  same changes there.
