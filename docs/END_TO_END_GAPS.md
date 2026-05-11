@@ -6,12 +6,18 @@
 
 # ATSC 3.0 end-to-end: from `atsc3_proto` to RF
 
-Today the project owns one slice of the broadcast stack — the ALP + TLV-mux
-link layer plus a Seastar TCP gateway. To answer **"put this content into
-ATSC 3.0 and pass it to the exciter"** end-to-end you need a layer above
-(input API + content packaging + service signaling) and a layer below (the
-A/324 broadcast-gateway → exciter handoff). This document inventories every
-protocol-level component, grouped by layer, and recommends a build order.
+ATSC 3.0 ("NextGen TV") is the IP-native next-generation digital terrestrial
+broadcast standard from the Advanced Television Systems Committee, replacing
+the MPEG-TS pipeline of ATSC 1.0. The stack is split across half a dozen
+specs: an OFDM/LDPC physical layer (A/321 bootstrap + A/322 PHY), a
+studio-to-transmitter scheduler and tunnel (A/324 STLTP), a link layer that
+carries IP packets over the air (**A/330 — ALP + TLV multiplex**), and
+service signaling plus content delivery (A/331 LLS/SLS, ROUTE/DASH, MMTP).
+This project takes **A/330 as its reference scope** and implements it as a
+YAML-driven C++ codec generator plus a Seastar gateway. Below is the full
+inventory of every protocol-level component between an operator's "broadcast
+this" and the RF exciter, grouped by layer, with the recommended build order
+at the bottom.
 
 | | |
 |---|---|

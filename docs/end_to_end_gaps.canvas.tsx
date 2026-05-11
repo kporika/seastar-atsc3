@@ -20,11 +20,12 @@ import {
 // =============================================================================
 // ATSC 3.0 end-to-end gap analysis for atsc3_proto.
 //
-// Today the project owns one slice of the broadcast stack: the ALP / TLV-mux
-// link layer plus a Seastar TCP gateway. This canvas inventories what would
-// be needed on top (input API + content packaging + service signaling) and
-// underneath (A/324 broadcast-gateway → exciter handoff) to drive an actual
-// ATSC 3.0 RF transmitter end to end.
+// Generic intro to ATSC 3.0 ("NextGen TV") and the suite of ATSC standards
+// (A/321/A/322 PHY, A/324 STLTP, A/330 ALP + TLV multiplex, A/331 signaling
+// + content delivery), with this project's reference scope (A/330) called
+// out. The body of the canvas inventories every protocol-level component
+// between an operator's "broadcast this" and the RF exciter, grouped by
+// layer, and recommends a build order.
 // =============================================================================
 
 type Status = "done" | "in-flight" | "missing" | "external";
@@ -514,13 +515,20 @@ export default function Atsc3EndToEndGaps() {
             <Stack gap={12}>
                 <H1>ATSC 3.0 end-to-end: from atsc3_proto to RF</H1>
                 <Text tone="secondary">
-                    Today the project owns one slice of the broadcast stack — the ALP +
-                    TLV-mux link layer plus a Seastar TCP gateway. To answer
-                    {' "'}<Text as="span" weight="semibold">put this content into ATSC 3.0 and pass it to the exciter</Text>{'" '}
-                    you need a layer above (input API + content packaging + service
-                    signaling) and a layer below (the A/324 broadcast-gateway → exciter
-                    handoff). Below is the inventory of every protocol-level component,
-                    grouped by layer, with the recommended build order at the bottom.
+                    ATSC 3.0 ("NextGen TV") is the IP-native next-generation digital
+                    terrestrial broadcast standard from the Advanced Television Systems
+                    Committee, replacing the MPEG-TS pipeline of ATSC 1.0. The stack is
+                    split across half a dozen specs: an OFDM/LDPC physical layer
+                    (A/321 bootstrap + A/322 PHY), a studio-to-transmitter scheduler and
+                    tunnel (A/324 STLTP), a link layer that carries IP packets over the
+                    air (<Text as="span" weight="semibold">A/330 — ALP + TLV multiplex</Text>),
+                    and service signaling plus content delivery
+                    (A/331 LLS/SLS, ROUTE/DASH, MMTP). This project takes{' '}
+                    <Text as="span" weight="semibold">A/330 as its reference scope</Text>{' '}
+                    and implements it as a YAML-driven C++ codec generator plus a Seastar
+                    gateway. Below is the full inventory of every protocol-level component
+                    between an operator's "broadcast this" and the RF exciter, grouped by
+                    layer, with the recommended build order at the bottom.
                 </Text>
             </Stack>
 
