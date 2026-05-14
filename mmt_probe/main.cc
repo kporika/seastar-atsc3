@@ -23,11 +23,18 @@
 //
 //   verify  --file PATH --expected-payloads HEX[,HEX,...]
 //                       [--validate-rtcm]
+//                       [--strip-lct-word0 [--expect-lct-codepoint N]
+//                                            [--expect-lct-tsi U32]]]
 //
 //       Walk the gw sink file as TLV-mux packets, decode the inner ALP,
 //       and assert each recovered payload matches expectations. With
 //       --validate-rtcm, also CRC-validates each recovered payload as
 //       a stand-alone RTCM v3 frame.
+//
+//       When --strip-lct-word0 is set (gateway was run with
+//       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
+//       opaque body. If word-0 declares a TSI (lab: header_length_words==2),
+//       the next four bytes are a big-endian 32-bit TSI (--expect-lct-tsi).
 //
 //   rtcm-gen --out PATH --frames N [--msg-type T] [--seed S]
 //                                  [--payload-bytes B]
@@ -53,7 +60,8 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <span>
+#include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -61,6 +69,7 @@
 #include <vector>
 
 #include "alp_decoder.h"
+#include "lct_rfc5651_word0_decoder.h"
 #include "tlv_mux_decoder.h"
 
 #include "rtcm_v3.h"
@@ -90,6 +99,17 @@ std::vector<std::byte> hex_to_bytes(std::string_view hex) {
         out.push_back(static_cast<std::byte>((hi << 4) | lo));
     }
     return out;
+}
+
+constexpr std::size_t k_lct_word0_bytes = sizeof(std::uint32_t);
+
+inline std::uint32_t read_be32(std::span<const std::byte> four) noexcept {
+    std::uint32_t x = 0;
+    for (auto b : four) {
+        x = static_cast<std::uint32_t>(
+            (x << 8) | static_cast<std::uint8_t>(b));
+    }
+    return x;
 }
 
 std::string bytes_to_hex(std::span<const std::byte> b) {
@@ -156,6 +176,12 @@ struct opts {
     std::uint32_t payload_bytes = 64;
     std::uint64_t seed = 0xC0FFEEu;
     bool validate_rtcm = false;
+    /// Peel RFC 5651 §5.1 header word–0 before comparing / RTCM-validation.
+    bool strip_lct_word0 = false;
+    /// When set with --strip-lct-word0, require this codepoint octet.
+    std::optional<std::uint8_t> expect_lct_codepoint;
+    /// When set with --strip-lct-word0, compare against the 32-bit TSI peel.
+    std::optional<std::uint32_t> expect_lct_tsi;
 };
 
 opts parse_args(int argc, char **argv) {
@@ -193,7 +219,20 @@ opts parse_args(int argc, char **argv) {
         else if (k == "--payload-bytes")       o.payload_bytes = static_cast<std::uint32_t>(next_uint());
         else if (k == "--seed")                o.seed = next_uint();
         else if (k == "--validate-rtcm")       o.validate_rtcm = true;
-        else throw std::runtime_error(
+        else if (k == "--strip-lct-word0")      o.strip_lct_word0 = true;
+        else if (k == "--expect-lct-codepoint") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error("--expect-lct-codepoint must be <= 255");
+            }
+            o.expect_lct_codepoint = static_cast<std::uint8_t>(v);
+        } else if (k == "--expect-lct-tsi") {
+            const auto v = next_uint();
+            if (v > std::numeric_limits<std::uint32_t>::max()) {
+                throw std::runtime_error("--expect-lct-tsi out of uint32 range");
+            }
+            o.expect_lct_tsi = static_cast<std::uint32_t>(v);
+        } else throw std::runtime_error(
             std::string("unknown option: ") + std::string(k));
     }
     return o;
@@ -381,6 +420,14 @@ int do_verify(const opts &o) {
         std::cerr << "verify: --file is required\n";
         return 2;
     }
+    if (o.expect_lct_codepoint.has_value() && !o.strip_lct_word0) {
+        std::cerr << "verify: --expect-lct-codepoint requires --strip-lct-word0\n";
+        return 2;
+    }
+    if (o.expect_lct_tsi.has_value() && !o.strip_lct_word0) {
+        std::cerr << "verify: --expect-lct-tsi requires --strip-lct-word0\n";
+        return 2;
+    }
     if (o.expected.empty() && !o.validate_rtcm) {
         std::cerr << "verify: --expected-payloads or --validate-rtcm required\n";
         return 2;
@@ -407,6 +454,82 @@ int do_verify(const opts &o) {
             return 1;
         }
 
+        const auto alp_body = alp.value.payload;
+        std::span<const std::byte> inner(alp_body);
+
+        if (o.strip_lct_word0) {
+            if (alp_body.size() < k_lct_word0_bytes) {
+                std::cerr << "verify: TLV #" << idx << " ALP opaque too short for "
+                             "LCT word0\n";
+                return 1;
+            }
+            auto lctd = atsc3::lct_rfc5651_word0::decode(
+                alp_body.subspan(0, k_lct_word0_bytes));
+            if (!lctd.ok) {
+                std::cerr << "verify: TLV #" << idx << " LCT word0 decode: "
+                          << lctd.error << "\n";
+                return 1;
+            }
+
+            std::size_t off = k_lct_word0_bytes;
+
+            if (!lctd.value.tsi_flag) {
+                if (lctd.value.header_length_words != 1) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " LCT word0-only mode expects "
+                                 "header_length_words==1 got "
+                              << static_cast<unsigned>(
+                                     lctd.value.header_length_words)
+                              << "\n";
+                    return 1;
+                }
+                if (o.expect_lct_tsi.has_value()) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " LCT header omits TSI but --expect-lct-tsi "
+                                 "given\n";
+                    return 1;
+                }
+            } else {
+                if (lctd.value.header_length_words != 2 ||
+                    lctd.value.toi_flag != 0 ||
+                    lctd.value.half_word_flag) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " unsupported LCT lab header (want "
+                                 "header_length_words==2 "
+                                 "toi_flag==0 half_word_flag==false)"
+                              << "\n";
+                    return 1;
+                }
+                if (alp_body.size() < off + sizeof(std::uint32_t)) {
+                    std::cerr << "verify: TLV #" << idx << " truncated TSI after "
+                                                                  "word0\n";
+                    return 1;
+                }
+                const std::uint32_t got_ts =
+                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                if (o.expect_lct_tsi.has_value() &&
+                    *o.expect_lct_tsi != got_ts) {
+                    std::cerr << "verify: TLV #" << idx << " LCT TSI want 0x"
+                              << std::hex << *o.expect_lct_tsi << " got 0x"
+                              << got_ts << std::dec << "\n";
+                    return 1;
+                }
+                off += sizeof(std::uint32_t);
+            }
+
+            if (o.expect_lct_codepoint.has_value() &&
+                *o.expect_lct_codepoint != lctd.value.codepoint) {
+                std::cerr << "verify: TLV #" << idx << " LCT codepoint want "
+                          << static_cast<unsigned>(*o.expect_lct_codepoint)
+                          << " got "
+                          << static_cast<unsigned>(lctd.value.codepoint)
+                          << "\n";
+                return 1;
+            }
+
+            inner = alp_body.subspan(off);
+        }
+
         if (!expected_hex.empty()) {
             if (idx >= expected_hex.size()) {
                 std::cerr << "verify: extra TLV-mux packet #" << idx
@@ -414,7 +537,7 @@ int do_verify(const opts &o) {
                 return 1;
             }
             const auto expected_bytes = hex_to_bytes(expected_hex[idx]);
-            const auto got = bytes_to_hex(alp.value.payload);
+            const auto got = bytes_to_hex(inner);
             const auto want = bytes_to_hex(std::span<const std::byte>(
                 expected_bytes.data(), expected_bytes.size()));
             if (got != want) {
@@ -426,17 +549,17 @@ int do_verify(const opts &o) {
         }
 
         if (o.validate_rtcm) {
-            auto rd = mmt_probe::rtcm_v3::decode(alp.value.payload);
+            auto rd = mmt_probe::rtcm_v3::decode(inner);
             if (!rd.ok) {
                 std::cerr << "verify: payload #" << idx
                           << " is not a valid RTCM frame: " << rd.error
                           << "\n";
                 return 1;
             }
-            if (rd.bytes_consumed != alp.value.payload.size()) {
+            if (rd.bytes_consumed != inner.size()) {
                 std::cerr << "verify: payload #" << idx
                           << " has trailing bytes after RTCM frame ("
-                          << (alp.value.payload.size() - rd.bytes_consumed)
+                          << (inner.size() - rd.bytes_consumed)
                           << ")\n";
                 return 1;
             }

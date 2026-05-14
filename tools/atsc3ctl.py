@@ -5,6 +5,7 @@
 # Python 3.9+ stdlib only: http.client + json.
 #
 #   export ATSC3_ADMIN=http://127.0.0.1:8080   # optional; else pass --base
+#   export ATSC3_ADMIN_TOKEN=secret            # when gw enables --admin-bearer-token
 #   ./tools/atsc3ctl.py config get
 #   ./tools/atsc3ctl.py config set-sink null://
 #   ./tools/atsc3ctl.py services list
@@ -35,6 +36,16 @@ def normalize_base(url: str) -> str:
     if "://" not in u:
         u = "http://" + u
     return u
+
+
+def with_auth_headers(
+    ns: argparse.Namespace, headers: Optional[Dict[str, str]] = None
+) -> Dict[str, str]:
+    h = dict(headers or {})
+    tok = getattr(ns, "admin_token", None)
+    if tok:
+        h.setdefault("Authorization", f"Bearer {tok}")
+    return h
 
 
 def http_request(
@@ -86,14 +97,22 @@ def print_json(raw: bytes) -> None:
 
 
 def cmd_config_get(ns: argparse.Namespace) -> int:
-    code, raw = http_request(ns.base, "GET", "/config")
+    code, raw = http_request(
+        ns.base, "GET", "/config", headers=with_auth_headers(ns)
+    )
     print_json(raw)
     return 0 if code == 200 else code
 
 
 def cmd_config_set_sink(ns: argparse.Namespace) -> int:
     payload = json.dumps({"sink_uri": ns.uri}).encode("utf-8")
-    code, raw = http_request(ns.base, "POST", "/config/sink", body=payload)
+    code, raw = http_request(
+        ns.base,
+        "POST",
+        "/config/sink",
+        body=payload,
+        headers=with_auth_headers(ns),
+    )
     print_json(raw)
     return 0 if code == 200 else code
 
@@ -105,15 +124,41 @@ def cmd_services_list(ns: argparse.Namespace) -> int:
 
 
 def cmd_services_add(ns: argparse.Namespace) -> int:
-    payload = json.dumps({"name": ns.name}).encode("utf-8")
-    code, raw = http_request(ns.base, "POST", "/services", body=payload)
+    doc: Dict[str, Any] = {"name": ns.name}
+    if getattr(ns, "sink_uri", None):
+        doc["sink_uri"] = ns.sink_uri
+    payload = json.dumps(doc).encode("utf-8")
+    code, raw = http_request(
+        ns.base, "POST", "/services", body=payload, headers=with_auth_headers(ns)
+    )
     print_json(raw)
     return 0 if code in (200, 201) else code
 
 
 def cmd_services_delete(ns: argparse.Namespace) -> int:
     path = f"/services?id={ns.id}"
-    code, raw = http_request(ns.base, "DELETE", path)
+    code, raw = http_request(
+        ns.base, "DELETE", path, headers=with_auth_headers(ns)
+    )
+    print_json(raw)
+    return 0 if code == 200 else code
+
+
+def cmd_services_patch_sink(ns: argparse.Namespace) -> int:
+    path = f"/services?id={ns.id}"
+    body_obj: Dict[str, Any]
+    if ns.clear:
+        body_obj = {"sink_uri": None}
+    else:
+        body_obj = {"sink_uri": ns.uri}
+    payload = json.dumps(body_obj).encode("utf-8")
+    code, raw = http_request(
+        ns.base,
+        "PATCH",
+        path,
+        body=payload,
+        headers=with_auth_headers(ns),
+    )
     print_json(raw)
     return 0 if code == 200 else code
 
@@ -156,7 +201,13 @@ def cmd_ingest_raw(ns: argparse.Namespace) -> int:
     if ns.service_id is not None:
         doc["service_id"] = int(ns.service_id)
     payload = json.dumps(doc).encode("utf-8")
-    code, raw = http_request(ns.base, "POST", "/ingest", body=payload)
+    code, raw = http_request(
+        ns.base,
+        "POST",
+        "/ingest",
+        body=payload,
+        headers=with_auth_headers(ns),
+    )
     print_json(raw)
     return 0 if code in (200, 202) else code
 
@@ -170,6 +221,12 @@ def main() -> int:
         "--base",
         default=os.environ.get("ATSC3_ADMIN", "http://127.0.0.1:8080"),
         help="Admin base URL (or set ATSC3_ADMIN)",
+    )
+    p.add_argument(
+        "--token",
+        dest="admin_token",
+        default=os.environ.get("ATSC3_ADMIN_TOKEN"),
+        help="Bearer token for POST/PATCH/PUT/DELETE (env ATSC3_ADMIN_TOKEN)",
     )
     sp = p.add_subparsers(dest="cmd", required=True)
 
@@ -187,7 +244,31 @@ def main() -> int:
     p_sl.set_defaults(func=cmd_services_list)
     p_sa = sp_s_sub.add_parser("add", help="POST /services")
     p_sa.add_argument("name")
+    p_sa.add_argument(
+        "--sink-uri",
+        dest="sink_uri",
+        default=None,
+        metavar="URI",
+        help="optional per-service ingest sink (otherwise default gw sink)",
+    )
     p_sa.set_defaults(func=cmd_services_add)
+    p_sp = sp_s_sub.add_parser(
+        "patch-sink",
+        help="PATCH /services — set or clear per-service ingest sink_uri",
+    )
+    p_sp.add_argument("id", help="numeric service id")
+    g = p_sp.add_mutually_exclusive_group(required=True)
+    g.add_argument(
+        "--uri",
+        metavar="SINK_URI",
+        help="sink URI for POST /ingest payloads tagged with this service",
+    )
+    g.add_argument(
+        "--clear",
+        action="store_true",
+        help="route service back through the gw default sink",
+    )
+    p_sp.set_defaults(func=cmd_services_patch_sink)
     p_sd = sp_s_sub.add_parser("delete", help="DELETE /services?id=")
     p_sd.add_argument("id", help="numeric service id")
     p_sd.set_defaults(func=cmd_services_delete)

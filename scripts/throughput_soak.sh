@@ -14,7 +14,7 @@
 #
 # Usage: scripts/throughput_soak.sh [BUILD_DIR] [DURATION_S] [SHARDS] [PAYLOAD_HEX]
 #
-# Defaults: BUILD_DIR=./build, DURATION_S=60, SHARDS=1, PAYLOAD_HEX=64xAA.
+# Defaults: BUILD_DIR auto (./build or ./build-docker; see scripts/_lib.sh), DURATION_S=60, SHARDS=1, PAYLOAD_HEX=64xAA.
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${script_dir}/_lib.sh"
 
 repo_root="$(cd "${script_dir}/.." && pwd)"
-build_dir="${1:-${repo_root}/build}"
+build_dir="${1:-$(detect_default_build_dir "${repo_root}")}"
 duration="${2:-60}"
 shards="${3:-1}"
 payload_hex="${4:-}"

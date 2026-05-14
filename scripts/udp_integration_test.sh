@@ -15,7 +15,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${script_dir}/_lib.sh"
 
 repo_root="$(cd "${script_dir}/.." && pwd)"
-build_dir="${1:-${repo_root}/build}"
+build_dir="${1:-$(detect_default_build_dir "${repo_root}")}"
 
 gw_bin="$(resolve_bin "${ATSC3_GW:-}"  "${build_dir}/gw/atsc3_gw"          atsc3_gw)"
 probe_bin="$(resolve_bin "${MMT_PROBE:-}" "${build_dir}/mmt_probe/mmt_probe" mmt_probe)"

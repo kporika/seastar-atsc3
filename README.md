@@ -65,7 +65,7 @@ atsc3_proto/
 │       └── <p>_fixtures_test.cc
 ├── gw/                        # Seastar gateway service
 │   ├── main.cc
-│   ├── admin_http.{cc,h}      # optional --admin-http: / /healthz /readyz /metrics /config PATCH /config /services POST /ingest /services DELETE /services?id=
+│   ├── admin_http.{cc,h}      # optional --admin-http control plane (TLS + bearer auth, /config, /services PATCH, /ingest)
 │   ├── atsc3_gw.{cc,h}        # sharded server, wires ingress → encoder → sink
 │   ├── ingress_tcp.{cc,h}     # SO_REUSEPORT TCP listener, per-conn framer
 │   ├── length_framer.{cc,h}   # 4-byte BE length-prefix stream framer
@@ -80,7 +80,8 @@ atsc3_proto/
 │   ├── encoder_pipeline_test.cc
 │   └── udp_ipv4_test.cc       # M8 IPv4+UDP header + checksum unit test
 ├── scripts/
-│   ├── integration_test.sh    # spawn gw + mmt_probe hex send/verify loopback
+│   ├── _lib.sh               # resolve_bin + detect_default_build_dir (integration scripts)
+│   ├── lct_word0_integration_test.sh  # gw --prepend-lct-word0 + verify --strip-lct-word0 (M8)
 │   ├── udp_integration_test.sh # same via udp:// sink + _udp_recv_concat.py
 │   ├── ipv4udp_file_integration_test.sh  # ipv4udp-file:// + m8 strip + verify
 │   ├── stltp_integration_test.sh  # stltp:// lab UDP + _stltp_lab_udp_to_tlvmux.py + verify
@@ -97,7 +98,7 @@ atsc3_proto/
 ├── webapp/                    # SPA mirror of the gap-analysis canvas
 │   └── src/                   #   built + deployed to GitHub Pages
 ├── .github/workflows/
-│   ├── ci.yml                 # Docker build + ctest + seven legs; main push/PR (not webapp/docs-only) + manual
+│   ├── ci.yml                 # Docker build + ctest + eight shell scripts before RTCM; main push/PR (not webapp/docs-only) + manual
 │   └── pages.yml              # Pages: build webapp/, publish on push
 ├── seastar/                   # git submodule, pinned to seastar-25.05.0
 ├── Dockerfile.deps            # base image: Seastar + transitive build deps
@@ -134,6 +135,7 @@ the project binaries.
 
 ```bash
 make deps              # 1) build atsc3-deps (Seastar + tooling)   ← ~15 min once
+make docker-build      #    optional: codegen + ninja → ./build-docker (repeat after edits; no slim image)
 make image             # 2) build atsc3-proto (codegen + cmake + ninja
                        #    + ctest + python smoke, then a runtime layer
                        #    carrying just the binaries + protocol YAMLs)
@@ -148,9 +150,14 @@ make run RUN_ARGS="--smp 4 --sink stdout://"
 (tracked via `.make/deps.stamp`), so once you've run `make deps` you can
 mostly forget about it.
 
+**Host scripts** (`scripts/*.sh`, `make integ`, …): see `scripts/_lib.sh`
+**`detect_default_build_dir`** — uses **`ATSC3_BUILD_DIR`** if set (`build`,
+`build-docker`, or absolute), else **`build/`** when **`gw/atsc3_gw`** exists
+there, else **`build-docker/`**, else **`build/`** (error path).
+
 On GitHub, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) builds
 both images with tests enabled and runs the same integration sequence as
-`make image-integ-all` (seven shell legs before RTCM, then RTCM at 12×96). It runs on pushes and PRs
+`make image-integ-all` (**eight** shell scripts before RTCM, then RTCM at 12×96). It runs on pushes and PRs
 to `main` unless the diff only touches `webapp/`, `docs/`, or
 [`pages.yml`](./.github/workflows/pages.yml); use **workflow_dispatch** in
 the Actions tab for a manual run.
@@ -179,10 +186,11 @@ plus RapidJSON, Python 3 with PyYAML and Jinja2:
 git submodule update --init --recursive   # populates ./seastar/ (optional)
 make build                                # codegen + cmake + ninja → ./build
 ctest --test-dir build --output-on-failure
-make integ                                # end-to-end loopback against ./build
+make integ                                # loopback — defaults ./build then ./build-docker
 make integ-udp                             # same via udp:// sink (needs python3)
 make integ-ipv4udp                         # ipv4udp-file:// + m8 strip + verify (needs python3)
 make integ-stltp                           # stltp:// lab UDP strip + verify (needs python3)
+make integ-lct-word0                       # --prepend-lct-word0 + verify --strip-lct-word0
 make integ-lls                             # lls:// Table 6.1 + gzip validate (needs python3)
 make integ-admin                           # PATCH /config sink hot-swap (needs python3)
 make integ-rtcm                            # RTCM path (default 32×128 in script; pass frames/bytes as extra args)
@@ -213,7 +221,7 @@ python3 -m pip install -r tools/requirements.txt
 
 ## M8 / M9 lab helpers
 
-- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is the first **RFC 5651** LCT header word in the YAML/codegen path (not wired into the gateway yet); full ROUTE/ALC/MMTP remains future work.
+- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is RFC 5651 LCT header **word‑0** in codegen; **`atsc3_gw`** **`--prepend-lct-word0 [--lct-codepoint N]`** with optional **`--lct-include-tsi --lct-tsi U32`** prefixes **word‑0** (and optionally **big‑endian TSI**) inside ALP ahead of ingress (max **2039** / **2043** user octets). **`mmt_probe verify`** **`--strip-lct-word0 [--expect-lct-codepoint N]`** with optional **`--expect-lct-tsi`** strips that lab header for asserts. Scripts: `./scripts/lct_word0_integration_test.sh` (covers word‑0 and word‑0+TSI), **`make integ-lct-word0`**. ROUTE sessions / FEC / MMTP framing remain future work.
 - **M9:** `lib/runtime/lls_table6_1.hh` matches the **A/331 Table 6.1** four-byte prefix used by `lls://`. **`tools/m9_lls_pack.py`** reads cleartext XML (e.g. `fixtures/lls/minimal_slt.xml`) and writes **prefix + gzip** to stdout for piping into `lls://` or `POST /ingest` (base64-wrap as needed).
 
 ```bash
@@ -226,8 +234,10 @@ python3 tools/m8_bin_to_pcap.py --self-test
 
 ## Run tests
 
+Use **`build/`** after **`make build`**, or **`build-docker/`** after **`make docker-build`**:
+
 ```bash
-cd build
+cd build-docker   # or: cd build
 ctest --output-on-failure
 # includes udp_ipv4_test (M8) + encoder_pipeline_test + generated *_fixtures_test
 ```
@@ -243,10 +253,20 @@ python tools/smoke/codec_smoke.py
 
 ## Run the gateway (M4)
 
+Binaries live under **`./build/`** (native **`make build`**) or **`./build-docker/`**
+(**`make docker-build`**). The examples below use **`./build/`** — substitute
+accordingly.
+
 The wire protocol on the ingress socket is **length-prefixed**: each
 message is `[u32 length, big-endian][payload bytes]`. The gateway wraps
 the payload as ALP (PACKET_TYPE_EXTENSION), then as TLV-mux (SIGNALING),
 and writes the TLV-mux bytes to the sink.
+
+**M8 lab (optional ROUTE-ish framing):** pass **`--prepend-lct-word0`** to insert the
+RFC 5651 LCT header **first 32‑bit word** (see **`protocol/lct_rfc5651_word0.yaml`**
+_fixture `minimal_v1_c0`_) before ingress inside ALP. With word‑0 only (**`header_length_words=1`**), the opaque body is **4 bytes + user** (max **2043** user bytes).
+With **`--lct-include-tsi`** and **`--lct-tsi U32`** (RFC 5651 TSI BE32 — lab path **without** TOI on the wire, **`header_length_words=2`**), opaque is **8 bytes header + user** (max **2039** user bytes).
+**`--lct-codepoint N`** sets the **`codepoint`** (**0–255**; **`--prepend-lct-word0`** only). **`GET /config`** echoes **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`**.
 
 ```bash
 # Single shard, sink to a file (one file per shard: gw.out.shard0, ...)
@@ -260,23 +280,29 @@ and writes the TLV-mux bytes to the sink.
 
 When you pass **`--admin-http host:port`**, the gateway also exposes:
 
-Optional **`--services-state-file /path/to/services.json`** (with or without admin HTTP): on **shard 0** the file is loaded at startup (if present) and rewritten after each successful **`POST /services`** or **`DELETE /services`**. JSON shape: `{"version":1,"next_id":N,"services":[{"id":1,"name":"…"},…]}`.
+Optional **`--services-state-file /path/to/services.json`** (with or without admin HTTP): on **shard 0** the file is loaded at startup (if present) and rewritten after each successful **`POST /services`**, **`PATCH /services?id=`**, or **`DELETE /services`**. JSON uses **`schema_version`** `2`, e.g. `{"schema_version":2,"next_id":N,"services":[{"id":1,"name":"…","sink_uri"?: "file:///tmp/x"},…]}` — **`sink_uri`** is optional; when set, **`POST /ingest`** with that **`service_id`** writes to that sink instead of the default shard sink (**TCP ingress** still uses only the global `--sink`).
 
+Optional **`--admin-bearer-token`**: **`POST` / `PATCH` / `PUT` / `DELETE`** on **`/config`**, **`/config/sink`**, **`/services`**, plus **`POST /ingest`**, must include **`Authorization: Bearer …`** (same secret as the CLI flag). **`GET`** routes (**`/healthz`**, **`/readyz`**, **`/metrics`**, **`/config`**, **`/services`**, **`/`**) stay open.
+
+HTTPS admin requires PEM **`--admin-tls-cert`** and **`--admin-tls-key`** together; **`--admin-http`** then serves TLS (**`curl`**, **`atsc3ctl --base https://…`**, …).
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/` | JSON index listing admin paths (discovery) |
 | GET | `/healthz` | Process liveness (`200` + `ok`) |
 | GET | `/readyz` | All shards have sink + ingress up (`200` or `503`) |
-| GET | `/config` | Read-only JSON: `ingress`, `sink_uri`, and `services_state_file` (`null` or path string) |
-| POST | `/config/sink` | Body must be only `{"sink_uri":"…"}` — hot-swaps the sink on every shard (sequential; rolls back prior shards if a later shard rejects the URI). **Preferred** for scripts; returns the same JSON as `GET /config` after the swap. |
-| PATCH or PUT | `/config` | Same JSON as `POST /config/sink`. |
-| GET | `/services` | JSON `{"services":[{"id", "name"},…]}` — registry on shard 0; persisted when `--services-state-file` is set |
-| GET | `/metrics` | Prometheus-style text counters (aggregate over shards) |
-| DELETE | `/services?id=<uint>` | Remove a service by id (`200` + `{"ok":true,"id":…}`; unknown id → `404`; bad/missing `id` → `400`) |
-| POST | `/ingest` | JSON `{"service_id"?: uint, "type":"raw"\|"rtcm"\|"lls", "payload_b64":"..."}` — if `service_id` is present it must exist in **`GET /services`**; same encode/sink rules as TCP ingress |
-| POST | `/services` | JSON `{"name":"…"}` → `201` + `{"id","name"}`; duplicate name → `409`; updates state file when configured |
+| GET | `/config` | **`ingress`**, **`sink_uri`**, **`services_state_file`**, **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`**, **`admin`**: **`operator_schema_version`**, **`tls`**, **`bearer_auth_required`** |
+| POST | `/config/sink` | Body **`{"sink_uri":"…"}`** — hot-swaps sink on every shard (**bearer** if enabled); returns **`GET /config` JSON** |
+| PATCH or PUT | `/config` | Same as **`POST /config/sink`** |
+| GET | `/services` | **`{"services":[{"id","name","sink_uri"},…]}`** (**`sink_uri`** **`null`** when absent) |
+| PATCH | `/services?id=<uint>` | Body **`{"sink_uri":"<uri>"}`** or **`{"sink_uri":null}`**. Bearer when token enabled; persisted when **`--services-state-file`**. |
+| GET | `/metrics` | Prometheus text counters |
+| DELETE | `/services?id=<uint>` | Remove (**`404`** unknown id); bearer when enabled. |
+| POST | `/ingest` | **`payload_b64`**, **`type`**, optional **`service_id`** — routes via that row's **`sink_uri`** when present; **`202`**; bearer when enabled. |
+| POST | `/services` | **`{"name"[, "sink_uri"]}`** → **`201`**; **`409`** duplicate name; bearer when enabled. |
 
-`POST /ingest` forwards decoded bytes to **shard 0** so file sinks stay deterministic in demos. Omit **`service_id`** for the legacy path; if set, it must match an id from **`GET /services`** (after **`POST /services`**).
+`POST /ingest` runs on **shard 0** (stable **`file://`** demos). Omit **`service_id`** to write to **`--sink`**. When set, **`service_id`** must exist in **`GET /services`**; if that row declares **`sink_uri`**, HTTP ingest writes there (**TCP ingress ignores registry sinks and keeps using **`--sink`**).
+
+Per-row **`file://…`** **`sink_uri`** values follow the same on-disk naming as **`--sink file://…`**: one path per shard, e.g. **`/tmp/x.shard0`** when **`sink_uri`** is **`file:///tmp/x`** and **`--smp 1`**.
 
 Example:
 
@@ -316,8 +342,9 @@ curl -sSf -X POST http://127.0.0.1:8080/ingest \
 ### One-shot integration script
 
 ```bash
-./scripts/integration_test.sh                # uses ./build
-./scripts/integration_test.sh /path/to/build # or a custom build dir
+./scripts/integration_test.sh                              # defaults: ./build, else ./build-docker
+./scripts/integration_test.sh /path/to/custom-build        # explicit build dir
+./scripts/lct_word0_integration_test.sh                    # M8 LCT prefix (+ optional TSI phase)
 # Spawns gw, runs mmt_probe send + verify against a temp sink file,
 # then tears the gw down. Exits 0 on success.
 ```

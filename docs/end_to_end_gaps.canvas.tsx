@@ -135,7 +135,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "REST or gRPC control API",
         status: "in-flight",
         notes:
-            "--admin-http: POST /ingest, GET /metrics, GET /config, POST /config/sink + PATCH/PUT /config (body {\"sink_uri\"} only), GET/POST/DELETE /services, GET /healthz /readyz; optional service_id on ingest when set; --services-state-file persists /services; tools/atsc3ctl.py (stdlib) wraps the same paths; per-service sink routing + TLS + gRPC still missing",
+            "--admin-http: POST /ingest, GET /metrics, GET /config, POST /config/sink + PATCH/PUT /config (mutators {\"sink_uri\"} only → global sink swap); GET /services, POST, PATCH (?id), DELETE (?id); optional Bearer (--admin-bearer-token) on mutators + POST /ingest; optional PEM HTTPS (--admin-tls-cert + --admin-tls-key); optional service_id on ingest → HTTP routes via row sink_uri (TCP ingress --sink only); --services-state-file schema_version 2 (reactor file I/O); tools/atsc3ctl.py mirrors; missing: gRPC, operator YAML/SQLite bootstrap, client mTLS, richer schema",
     },
     {
         layer: "UI / API",
@@ -143,7 +143,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "Service config persistence",
         status: "in-flight",
         notes:
-            "Optional --services-state-file JSON for /services (shard 0); examples/gw.operator.example.json for argv/compose reference; full operator YAML/SQLite + schema versioning still missing",
+            "Optional --services-state-file JSON for /services (shard 0; load/persist via reactor file + dma_read / output_stream + rename — no fstream in seastar::async); examples/gw.operator.example.json; full operator YAML/SQLite + schema versioning still missing",
     },
     // --- content sources ---
     {
@@ -218,7 +218,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "ROUTE / LCT packetizer",
         status: "in-flight",
         notes:
-            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); full ALC/ROUTE sessions + source/repair flows still missing",
+            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); gw --prepend-lct-word0 adds word-0 (optional --lct-include-tsi) inside ALP ahead of payloads (lab); full ALC/ROUTE sessions + source/repair still missing",
     },
     {
         layer: "Transport",
@@ -241,7 +241,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; protocol/lct_rfc5651_word0.yaml (LCT first word); full ROUTE/ALC/MMTP not in gw yet",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw --prepend-lct-word0 lab prefix (+ optional BE32 TSI) inside ALP; full ROUTE/ALC/MMTP wire not in gw yet",
     },
     // --- link (this is us) ---
     {
@@ -382,8 +382,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Ops",
         spec: "—",
         component: "Auth + TLS on the control API",
-        status: "missing",
-        notes: "mTLS or token; required before any production exposure",
+        status: "in-flight",
+        notes:
+            "Bearer token (--admin-bearer-token) on mutators + POST /ingest; HTTPS admin with PEM cert/key; client mTLS / OIDC / audit trail still missing for production",
     },
     {
         layer: "Ops",
@@ -412,12 +413,14 @@ const ROADMAP: ReadonlyArray<{
             "REST or gRPC API + a service-config YAML schema persisted under /var/lib/atsc3_proto. " +
             "Replaces the current TCP-only ingress with a first-class operator surface: declare a " +
             "service, attach a content source, push it. Minimal M7 surface shipped: stdlib CLI (atsc3ctl), " +
-            "thin Operator web tab (dev), JSON example for compose; full YAML/SQLite schema, gRPC, and TLS remain future work.",
+            "thin Operator web tab (dev), JSON example for compose, PATCH /services?id= per-row sink_uri, " +
+            "optional Bearer + HTTPS listener, POST /ingest service_id routing (HTTP only), --services-state-file. " +
+            "Full YAML/SQLite schema, gRPC, and client mTLS remain future work.",
         unlocks:
-            'A human (or upstream system) can drive admin HTTP from browser (dev), webapp Operator tab, or tools/atsc3ctl.py; optional service JSON via --services-state-file',
+            "A human (or upstream system) can drive admin HTTP from browser (dev), webapp Operator tab, or tools/atsc3ctl.py; optional service JSON via --services-state-file; global sink hot-swap; per-service HTTP ingest sink selection",
         closes: [
             "Web UI (partial: Operator tab + dev proxy; full dashboard still open)",
-            "REST (partial: admin-http + atsc3ctl; gRPC/TLS/per-service sinks still open)",
+            "REST (partial: admin-http + atsc3ctl + PATCH /services + bearer + HTTPS; gRPC + client mTLS + YAML/SQLite still open)",
             "Service config persistence (partial: --services-state-file + example JSON)",
         ],
     },
@@ -427,13 +430,13 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
-            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word). " +
+            "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) expands the lab header before ingress. " +
             "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
             "ALP encapsulation already accepts opaque payloads.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
-            "ROUTE/LCT packetizer (partial: LCT header word-0 YAML)",
+            "ROUTE/LCT packetizer (partial: word-0 YAML + gw prepend + optional TSI bytes)",
             "MMTP packetizer",
             "Raptor10/RaptorQ FEC",
         ],
@@ -498,14 +501,15 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Round out the link layer with ALP segmentation + concatenation (so jumbo IP packets and " +
             "small signaling bursts behave correctly under MTU pressure) and the additional-headers " +
-            "stream. In parallel, ship Prometheus metrics, /healthz, /readyz, mTLS on the control API, " +
-            "and structured JSON logs.",
+            "stream. Ops baseline is already on --admin-http (text /metrics, /healthz, /readyz, optional " +
+            "Bearer + PEM HTTPS); M12 finishes production hardening: OTEL + PLP/service labels, client mTLS, " +
+            "OIDC/audit trails, structured JSON logs, deeper readiness as needed.",
         unlocks: "Production-readable telemetry + clean MTU semantics",
         closes: [
             "ALP segmentation/concatenation",
             "ALP additional headers",
-            "Prometheus metrics",
-            "Auth + TLS",
+            "Prometheus / OpenTelemetry metrics",
+            "Auth + TLS (client mTLS, OIDC, audits)",
             "Health + readiness probes",
         ],
     },
@@ -611,7 +615,7 @@ export default function Atsc3EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutators {\"sink_uri\"} only), GET/POST/PATCH/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi), optional --services-state-file, GET /healthz, /readyz, /metrics; optional --admin-bearer-token + PEM TLS (--admin-tls-cert/--admin-tls-key); Operator tab via Vite /__atsc3_admin → ATSC3_ADMIN_URL; tools/atsc3ctl.py",
                         ]}
                     />
                     <BulletGroup
@@ -628,7 +632,7 @@ export default function Atsc3EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0)",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml + gw --prepend-lct-word0 (+ optional BE32 --lct-include-tsi) (RFC 5651 LCT ahead of ingress inside ALP)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -643,9 +647,11 @@ export default function Atsc3EndToEndGaps() {
                             "scripts/stltp_integration_test.sh — stltp:// lab UDP strip + verify",
                             "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
                             "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
-                            "scripts/run_all_integration.sh — all sink/LLS/STLTP legs + RTCM 12×96",
+                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + RTCM 12×96",
+                            "scripts/lct_word0_integration_test.sh — word-0 then word-0+TSI loopback + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi]",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
-                            ".github/workflows/ci.yml — same seven legs in Docker (RTCM 12×96); skips webapp/docs/pages-only diffs; workflow_dispatch",
+                            "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
+                            ".github/workflows/ci.yml — eight Docker scripts + RTCM (12×96) like image-integ-all; skips webapp/docs/pages-only diffs; workflow_dispatch",
                         ]}
                     />
                 </Grid>
@@ -837,37 +843,68 @@ export default function Atsc3EndToEndGaps() {
                                     ,{" "}
                                     <Text as="span" weight="semibold">
                                         GET /config
-                                    </Text>{" "}
-                                    (JSON ingress + sink_uri),{" "}
-                                    <Text as="span" weight="semibold">
-                                        GET /services
-                                    </Text>
-                                    {" / "}
-                                    <Text as="span" weight="semibold">
-                                        POST /services
                                     </Text>
                                     ,{" "}
                                     <Text as="span" weight="semibold">
-                                        DELETE /services?id=
-                                    </Text>{" "}
-                                    (in-memory service registry), and health/metrics routes are
-                                    available when you pass{" "}
+                                        POST /config/sink
+                                    </Text>
+                                    {" / "}
+                                    <Text as="span" weight="semibold">
+                                        PATCH
+                                    </Text>
+                                    {" / "}
+                                    <Text as="span" weight="semibold">
+                                        PUT /config
+                                    </Text>
+                                    {" "}
+                                    (sink_uri hot-swap),{" "}
+                                    <Text as="span" weight="semibold">
+                                        GET / POST / PATCH / DELETE /services
+                                    </Text>
+                                    , optional Bearer + PEM HTTPS, optional{" "}
+                                    <Text as="span" weight="semibold">
+                                        --services-state-file
+                                    </Text>
+                                    , optional M8{" "}
+                                    <Text as="span" weight="semibold">
+                                        --prepend-lct-word0
+                                    </Text>
+                                    {" + "}
+                                    <Text as="span" weight="semibold">
+                                        --lct-codepoint
+                                    </Text>
+                                    {" "}
+                                    (optional{" "}
+                                    <Text as="span" weight="semibold">
+                                        --lct-include-tsi
+                                    </Text>
+                                    {" + "}
+                                    <Text as="span" weight="semibold">
+                                        --lct-tsi
+                                    </Text>
+                                    ; RFC&nbsp;5651 word‑0 + optional BE32 TSI inside ALP; max 2039 /
+                                    2043 user octets; GET /config echoes LCT fields), plus health/metrics routes when you pass{" "}
                                     <Text as="span" weight="semibold">
                                         --admin-http host:port
-                                    </Text>{" "}
-                                    to the gateway (Seastar HTTP). Ingest JSON envelope:
+                                    </Text>
+                                    . Ingest JSON envelope:
                                 </Text>
                                 <Text size="small">
                                     {`{ "service_id": 1, "type": "rtcm" | "raw" | "lls", "payload_b64": "..." }`}
                                 </Text>
                                 <Text>
-                                    With{" "}
+                                    If{" "}
+                                    <Text as="span" weight="semibold">
+                                        service_id
+                                    </Text>{" "}
+                                    is set, it must match GET /services; per-row sink_uri routes HTTP
+                                    ingest only (TCP keeps --sink). With{" "}
                                     <Text as="span" weight="semibold">
                                         --sink lls://…
                                     </Text>
                                     , cleartext or pre-gzipped LLS is framed per A/331 (Table 6.1 +
-                                    gzip) on UDP and skips ALP/TLV; otherwise the same encoder as
-                                    TCP ingress applies (`type` is validated only for now).
+                                    gzip) on UDP and skips ALP/TLV; otherwise the same encoder as TCP
+                                    ingress applies (`type` is validated only for now).
                                 </Text>
                             </Stack>
                         </CardBody>

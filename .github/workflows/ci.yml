@@ -63,10 +63,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Integration — file / UDP / M8 / STLTP / LLS / admin config + RTCM
+      - name: Integration — file / UDP / M8 / STLTP / LLS / admin+M7 / LCT-word0 / RTCM
         run: |
           set -euo pipefail
-          for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh; do
+          for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh m7_operator_integration_test.sh lct_word0_integration_test.sh; do
             echo ">>> $s"
             docker run --rm --entrypoint "/opt/atsc3_proto/scripts/${s}" atsc3-proto:latest
           done

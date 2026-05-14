@@ -1,7 +1,7 @@
 <!--
-  Auto-rendered from end_to_end_gaps.canvas.tsx. If you change one, change
-  the other so they stay in sync. The canvas is the interactive Cursor
-  artifact; this markdown is what GitHub / non-Cursor readers see.
+  Keep in sync with end_to_end_gaps.canvas.tsx. The hero summary stats mirror
+  the `GAPS` array (DONE / partial+missing open / EXTERNAL / pct done), not the
+  separate STACK overview table. Markdown is what GitHub / non-Cursor readers see.
 -->
 
 # ATSC 3.0 end-to-end: from `atsc3_proto` to RF
@@ -22,9 +22,9 @@ at the bottom.
 | | |
 |---|---|
 | **Gap rows marked DONE** | 3 |
-| **Gap rows PARTIAL or MISSING (in scope)** | 32 |
+| **Gap rows PARTIAL + MISSING (in scope)** | 27 |
 | **Out of scope (exciter / RF)** | 6 |
-| **In-scope coverage (DONE ÷ in-scope rows)** | 9 % |
+| **In-scope coverage (DONE ÷ in-scope rows)** | 10 % |
 | **Declared repo roadmap (A/330 lab link layer)** | **3** rows with `roadmap: true` in `end_to_end_gaps.canvas.tsx` — **3 DONE**, **0 open**, **100%** |
 
 The roadmap line is a **declared subset** of the full inventory (ALP base header, TLV single packet, TLV-mux frame composition). It does not remove or rewrite the operator→RF table below; expand `roadmap: true` when the repo takes on new committed items.
@@ -55,7 +55,8 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - TCP length-prefix ingress: `[u32 BE length] [payload]`
 - Per-shard `SO_REUSEPORT` load balancing on the listen socket
 - RTCM v3 frames as a special-case payload via `mmt_probe --rtcm-file`
-- Optional HTTP admin (`--admin-http host:port`): `POST /ingest`, `GET /healthz`, `/readyz`, `/metrics`, **`GET /config`**, **`POST /config/sink`** (JSON `{"sink_uri":"…"}` only — reliable hot-swap on all shards; same handler as **`PATCH` / `PUT` /config**), **`GET /services`** / **`POST /services`** / **`DELETE /services?id=`**; optional **`--services-state-file`** persists the service registry as JSON (shard 0; see `gw/atsc3_gw.cc`). Thin **Operator** tab in `webapp/` (local `npm run dev`) calls the same API via Vite proxy **`/__atsc3_admin`** → **`ATSC3_ADMIN_URL`** (default `http://127.0.0.1:8080`). Shell automation: **`tools/atsc3ctl.py`** (`ATSC3_ADMIN` or `--base`). Reference JSON for compose/argv: **`examples/gw.operator.example.json`**
+- **`--prepend-lct-word0`** (**`--lct-codepoint`**), optional **`--lct-include-tsi --lct-tsi`**: RFC 5651 LCT lab header **inside** ALP ahead of ingress (word‑0 only ⇒ max **2043** user octets **+** **4**‑byte prefix; with TSI BE32 ⇒ max **2039** **+** **8** bytes); **`GET /config`** echoes **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`** **—** ROUTE sessions / FEC still future
+- Optional HTTP admin (**`--admin-http host:port`**): **`POST /ingest`**, **`GET /config`**, **`POST /config/sink`** plus **`PATCH` / `PUT` /config** (mutators accept **`sink_uri`** only — hot-swaps **`--sink` on every shard**), **`GET /services`** / **`POST /services`** / **`PATCH /services?id=`** (**`sink_uri`** or **`null`** for per-row HTTP ingest routing) / **`DELETE /services?id=`**, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**; optional **`--admin-bearer-token`** (Bearer auth on **`POST/PATCH/PUT/DELETE`** and **`POST /ingest`**); optional PEM **`--admin-tls-cert`** + **`--admin-tls-key`** (HTTPS listener); optional **`--services-state-file`** — JSON (**`schema_version` 2**) load/save on shard 0 using reactor **`open_file_dma`/`dma_read`** read path and streamed write + **`rename_file`** (**no** `fstream`/`seastar::async` mixing). Thin **Operator** tab in **`webapp/`** (**`npm run dev`**) via Vite **`/__atsc3_admin`** → **`ATSC3_ADMIN_URL`**. **`tools/atsc3ctl.py`**. **`examples/gw.operator.example.json`**.
 
 **What it produces on the wire**
 - ALP packet: 16-bit base header + opaque payload (≤ 2047 B)
@@ -68,7 +69,7 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - MSB-first bit reader/writer in `lib/runtime/`
 
 **M8 / M9 (lab transport & LLS helpers)**
-- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 first LCT header word (codegen only); ROUTE/ALC/MMTP not wired into the gateway yet
+- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 first LCT header word (codegen); gateway **`--prepend-lct-word0`** prefixes that word (optional **`--lct-include-tsi`**) inside ALP (lab stitch); ROUTE sessions / MMTP wire / FEC not in **`atsc3_gw`** yet
 - `lib/runtime/lls_table6_1.hh` — **M9** A/331 Table 6.1 four-byte LLS prefix helper (matches `gw/sink.cc`)
 - `tools/m9_lls_pack.py` + `fixtures/lls/minimal_slt.xml` — **M9** lab: cleartext XML → prefix + gzip (RFC 1952) for bench / `lls://` ingest
 
@@ -76,14 +77,16 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - Per-protocol fixture round-trip tests (auto-generated)
 - `tools/smoke/codec_smoke.py` — pure-Python golden checks (27 cases)
 - `scripts/integration_test.sh` — `gw` + `mmt_probe` loopback in 1 process
+- `scripts/lct_word0_integration_test.sh` — `gw` with word‑0 then word‑0+TSI + `mmt_probe verify --strip-lct-word0 [--expect-lct-tsi]` (same hex payloads as `integration_test.sh`)
 - `scripts/udp_integration_test.sh` — same payloads through **`udp://`** sink (Python collects UDP payloads)
 - `scripts/ipv4udp_file_integration_test.sh` — **`ipv4udp-file://`** M8 append + **`m8_bin_to_pcap.py --extract-tlvmux`** + `mmt_probe verify`
 - `scripts/stltp_integration_test.sh` — **`stltp://`** lab UDP + **`_stltp_lab_udp_to_tlvmux.py`** strip + `mmt_probe verify`
 - `scripts/lls_integration_test.sh` — **`lls://`** cleartext XML → **Table 6.1 + gzip** UDP; **`_lls_lab_integ_recv.py`** validates one datagram
 - `scripts/rtcm_integration_test.sh` — **`mmt_probe rtcm-gen`** → gw → **`send --rtcm-file`** → **`verify --validate-rtcm`**
-- `scripts/run_all_integration.sh` — runs the sink/LLS/STLTP scripts above plus RTCM with **12×96** frames (quick local sweep)
+- `scripts/run_all_integration.sh` — runs the sink/LLS/STLTP scripts above plus admin + **M7** + LCT word‑0 + RTCM (**12×96**)
 - `scripts/admin_patch_config_integration_test.sh` — admin **`POST /config/sink`** hot-swaps **`sink_uri`** (`null://` ↔ original) with HTTP checks
-- `.github/workflows/ci.yml` — same seven Docker integration legs as `make image-integ-all` (RTCM **12×96**) on push/PR to `main`; skipped when the diff only touches `webapp/`, `docs/`, or `pages.yml`; **`workflow_dispatch`** for manual runs
+- `scripts/m7_operator_integration_test.sh` — Bearer + **`PATCH /services`**, **`POST /ingest`** with **`service_id`**, **`--services-state-file`** persistence (**`SIGTERM`** before reading **`file://`**.**`shard0`** sinks)
+- `.github/workflows/ci.yml` — same **`make image-integ-all`** Docker sequence (**eight** shell scripts **before** RTCM, then RTCM **12×96**); skips `webapp/` / `docs` / **`pages.yml`**–only diffs; **`workflow_dispatch`**
 
 ---
 
@@ -116,8 +119,8 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 | Spec | Component                          | Status  | Notes                                                  |
 |------|------------------------------------|---------|--------------------------------------------------------|
 | —    | Web UI (operator dashboard)        | PARTIAL | Thin **Operator** tab in `webapp/` (Vite dev proxy **`/__atsc3_admin`**); config/services/metrics/sink; full dashboard (PLP map, telemetry, push-to-broadcast) still missing; static GitHub Pages build has no admin backend |
-| —    | REST or gRPC control API           | PARTIAL | `--admin-http`: `POST /ingest`, `GET /metrics`, **`GET /config`**, **`POST /config/sink`** / **`PATCH` / `PUT` /config** (body `{"sink_uri":"…"}` only — runtime sink swap on all shards), **`GET /services`**, **`POST /services`**, **`DELETE /services?id=`**, `GET /healthz` / `readyz`; optional `service_id` on ingest when present; **`--services-state-file`** persists `/services`; **`tools/atsc3ctl.py`** (stdlib) mirrors the same paths; per-service sink routing, TLS, gRPC, and full operator schema still missing |
-| —    | Service config persistence         | PARTIAL | **`--services-state-file`**: JSON snapshot of `/services` (shard 0); **`examples/gw.operator.example.json`** for argv/compose reference; full operator YAML/SQLite + schema versioning still missing |
+| —    | REST or gRPC control API           | PARTIAL | **`--admin-http`**: **`POST /ingest`**, **`GET /metrics`**, **`GET /config`**, **`POST /config/sink`** / **`PATCH` / `PUT` /config** (mutators: **`sink_uri`** only), **`GET/POST/PATCH/DELETE /services`** (**`PATCH`** **`?id=`**), optional Bearer (**`--admin-bearer-token`**) on mutators + **`POST /ingest`**, PEM server TLS (**`--admin-tls-cert`** + **`--admin-tls-key`**), optional **`service_id`** on **`POST /ingest`** → row **`sink_uri`** (**HTTP** only **—** TCP **`--sink`** only), **`--services-state-file`** (**`schema_version` 2**), **`tools/atsc3ctl.py`**. **Still missing:** gRPC, YAML/SQLite bootstrap, **client** mTLS, richer schema. |
+| —    | Service config persistence         | PARTIAL | **`--services-state-file`**: JSON snapshot of **`/services`** (shard 0; reactor **`file`** I/O for load/write); **`examples/gw.operator.example.json`**. Full operator YAML/SQLite + schema versioning still missing |
 
 ### Content
 
@@ -142,7 +145,7 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
-| A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first 32-bit LCT header word (codegen + fixtures); ALC session setup, source/repair flows, and ATSC ROUTE binding still missing |
+| A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first 32-bit LCT header word (codegen + fixtures); gw lab stitch adds word‑0 and optional BE32 **TSI** inside ALP; ALC sessions, TOI/full headers, source/repair, and ATSC ROUTE binding still missing |
 | A/331 §10          | MMTP packetizer + signaling messages   | MISSING | MMTP header, MFU mode, PA / MPI / MPT messages       |
 | RFC 5053 / 6330    | Raptor10 / RaptorQ FEC                 | MISSING | Required for ROUTE robustness over a one-way link    |
 
@@ -189,7 +192,7 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 | Spec | Component                                | Status  | Notes                                                    |
 |------|------------------------------------------|---------|----------------------------------------------------------|
 | —    | Prometheus / OpenTelemetry metrics       | PARTIAL | Text `GET /metrics` when `--admin-http` is set (aggregate counters); OTEL + PLP/service labels still missing |
-| —    | Auth + TLS on the control API            | MISSING | mTLS or token; required before any production exposure   |
+| —    | Auth + TLS on the control API            | PARTIAL | Bearer (`--admin-bearer-token`) + HTTPS PEM listener shipped; client mTLS, OIDC/integration auth, and audit trails still missing |
 | —    | Health + readiness probes                | PARTIAL | `GET /healthz`, `GET /readyz` on `--admin-http` bind address |
 
 ---
@@ -204,14 +207,18 @@ unlocks a concrete capability you can demo end-to-end.
 REST or gRPC API + a service-config YAML schema persisted under
 `/var/lib/atsc3_proto`. Replaces the current TCP-only ingress with a
 first-class operator surface: declare a service, attach a content source,
-push it. **Shipped for M7 (minimal operator surface):** **`tools/atsc3ctl.py`**
-(stdlib HTTP), webapp **Operator** tab (local dev via Vite **`/__atsc3_admin`**
-→ **`ATSC3_ADMIN_URL`**), and **`examples/gw.operator.example.json`** for
-compose/argv reference. Full YAML/SQLite persistence, gRPC, TLS, and a
-production-grade dashboard remain future work.
+push it. **Shipped (minimal operator surface):** **`tools/atsc3ctl.py`**
+(stdlib HTTP), webapp **Operator** tab (dev via **`/__atsc3_admin`**
+→ **`ATSC3_ADMIN_URL`**), **`examples/gw.operator.example.json`**,
+optional **`PATCH /services?id=`** for per-row **`sink_uri`**, optional
+**Bearer** + **HTTPS** admin, **`POST /ingest`** **`service_id`** routing to
+those sinks (shard 0; TCP ingress unchanged), **`--services-state-file`**
+(load/save on reactor **`file`** path). Full YAML/SQLite persistence, **gRPC**,
+and a production-grade dashboard remain future work.
 
-**Unlocks:** A human (or upstream system) can drive **`--admin-http`** from curl, **`tools/atsc3ctl.py`**, or the webapp **Operator** tab in dev (Vite **`/__atsc3_admin`** proxy); optional service registry JSON via **`--services-state-file`**; **`POST /config/sink`** / **`PATCH` / `PUT` /config** hot-swaps **`sink_uri`** on all shards.
-**Closes:** Web UI (partial: Operator tab + dev proxy; full dashboard still open) · REST (partial: admin HTTP + **`atsc3ctl`**; gRPC/TLS/per-service sinks still open) · Service config persistence (partial: **`--services-state-file`** + **`examples/gw.operator.example.json`**).
+**Unlocks:** Drive **`--admin-http`** via curl **`/ atsc3ctl / Operator`**; optional **`--services-state-file`**; global sink hot-swap; per-service HTTP ingest sink selection + registry persistence under the JSON schema noted in **`README`**.
+
+**Closes:** Web UI (partial) · REST (still partial: **gRPC**, **client** mTLS/SQLite bootstrap open) · Service config (**partial**: JSON file only).
 
 ### M8 — Network + transport (UDP/IP, ROUTE/LCT, MMTP)
 
@@ -221,8 +228,10 @@ and **`udp://`** / **`ipv4udp-file://`** sinks (not YAML-driven). **LCT**
 starts with **`protocol/lct_rfc5651_word0.yaml`** (first on-wire word only).
 Full **ROUTE/LCT** sessions, **MMTP** payloads on the air interface, and
 **Raptor10/RaptorQ** remain to be built. ALP encapsulation already accepts
-opaque payloads; wiring real ROUTE packets through the gateway is the next
-integration step after the codecs exist.
+opaque payloads; the gateway can now **prefix** the codegen **LCT word‑0**
+(**`--prepend-lct-word0`**, optional **`--lct-include-tsi`**) as a lab stitch—**TOI**
+and ROUTE object delivery beyond this prefix are still the integration target
+after richer codecs exist.
 
 **Unlocks:** Real IP multicast packets ride through ALP+TLV-mux.
 **Closes:** UDP/IPv4 builder (partial: C++ datagram builder + sinks) · ROUTE/LCT packetizer (partial: LCT header word-0 YAML) · MMTP packetizer · Raptor10/RaptorQ FEC.
@@ -267,11 +276,14 @@ lines of code; defer until the whole pipe is otherwise exercised.
 
 Round out the link layer with ALP segmentation + concatenation (so jumbo
 IP packets and small signaling bursts behave correctly under MTU pressure)
-and the additional-headers stream. In parallel, ship Prometheus metrics,
-`/healthz`, `/readyz`, mTLS on the control API, and structured JSON logs.
+and the additional-headers stream. On operations, **`--admin-http` already
+serves** text **`GET /metrics`**, **`GET /healthz`**, **`GET /readyz`**, optional
+**Bearer** + **PEM HTTPS**; M12 is where that stack is **finished for production**:
+OpenTelemetry + PLP/service labels, **client** **mTLS** (and integration-style auth), audit trails, structured JSON logs, and any deeper
+readiness semantics still missing.
 
 **Unlocks:** Production-readable telemetry + clean MTU semantics.
-**Closes:** ALP segmentation/concatenation · ALP additional headers · Prometheus metrics · Auth + TLS · Health + readiness probes.
+**Closes:** ALP segmentation/concatenation · ALP additional headers · Prometheus / OpenTelemetry metrics · Auth + TLS on the control API (**client** mTLS, OIDC, audits) · Health + readiness probes.
 
 ---
 
@@ -294,15 +306,12 @@ them can act as the downstream peer once M10 lands.
 
 ### Smallest input surface
 
-**Implemented (optional):** pass **`--admin-http host:port`** to `atsc3_gw`.
-The gateway listens for **`POST /ingest`**, **`GET /config`** / **`POST /config/sink`** / **`PATCH` / `PUT` /config** (JSON `ingress` + `sink_uri` + optional `services_state_file`; mutating endpoints accept only `{"sink_uri":"…"}` to hot-swap the sink on every shard), **`GET /services`** / **`POST /services`** / **`DELETE /services?id=`** (optional **`--services-state-file`** JSON persistence on shard 0), **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`** (`seastar/http`). JSON envelope for ingest:
+**Implemented (optional):** pass **`--admin-http host:port`** to **`atsc3_gw`**. The gateway serves **`POST /ingest`**, **`GET /config`**, **`POST /config/sink`**, **`PATCH` / `PUT` /config** (mutating bodies are **`{"sink_uri":"…"}`** only—global hot-swap), **`GET`** / **`POST`** / **`PATCH`** / **`DELETE /services`**, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**. Optional **`--admin-bearer-token`**, **`--admin-tls-cert`** + **`--admin-tls-key`** (**HTTPS** listener), **`--services-state-file`** (JSON **`schema_version` 2**, shard 0), and (**M8**) **`--prepend-lct-word0`** with **`--lct-codepoint`** and optional **`--lct-include-tsi --lct-tsi`** (RFC 5651 word‑0 + optional BE32 **TSI** inside ALP; max **2039** / **2043** user octets). **`POST /ingest`** JSON envelope:
 
 ```json
 { "service_id": 1, "type": "rtcm" | "raw" | "lls", "payload_b64": "..." }
 ```
 
-Payloads are base64-decoded. If **`service_id`** is set, it must match an id returned by **`POST /services`** (shard 0 registry). With **`--sink lls://…`**, cleartext (or pre-gzipped / pre-framed LLS) is sent as **A/331 LLS** UDP (Table 6.1 header + gzip) and skips ALP/TLV; otherwise payloads use the same **ALP→TLV-mux** path as TCP ingress (`type` is validated but not otherwise routed).
-
-### Smallest output surface
+Payloads are base64-decoded. If **`service_id`** is present, it must match the registry from **`GET /services`**; when **`sink_uri`** is set on that row, HTTP ingest routes there (TCP ingress **`--sink`** only—see **`README`**). With **`--sink lls://…`**, cleartext (or gzip) LLS still uses **A/331 Table 6.1 + gzip** UDP and skips **ALP**/**TLV**; otherwise payloads use **ALP→TLV-mux** like TCP ingress (**`type`** is validated but not otherwise routed).
 
 Use **`--sink udp://host:port`** for plain TLV-mux over UDP (kernel stacks IP/UDP). Use **`--sink ipv4udp-file:///tmp/out.bin?src=10.0.0.1&dst=224.0.1.1&srcport=4000&dstport=5000`** to append **M8** IPv4+UDP datagrams (for offline inspection / PCAP tooling). Use **`--sink stltp://host:port`** for a minimal lab STLTP-style UDP wrap of each TLV-mux frame (see `gw/sink.cc`). Not full M10 conformance, but useful on the bench with a tolerant exciter.

@@ -214,7 +214,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "ROUTE / LCT packetizer",
         status: "in-flight",
         notes:
-            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); full ALC/ROUTE sessions + source/repair flows still missing",
+            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); gw --prepend-lct-word0 adds word-0 (optional --lct-include-tsi) inside ALP (lab); full ALC/ROUTE sessions + source/repair flows still missing",
     },
     {
         layer: "Transport",
@@ -236,7 +236,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word); full ROUTE/ALC/MMTP not in gw yet",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw prepend (+ optional BE32 TSI); full ROUTE/ALC/MMTP not in gw yet",
     },
     {
         layer: "Link",
@@ -417,13 +417,13 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
-            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word). " +
+            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); optional BE32 TSI via --lct-include-tsi. " +
             "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
             "ALP encapsulation already accepts opaque payloads.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
-            "ROUTE/LCT packetizer (partial: LCT header word-0 YAML)",
+            "ROUTE/LCT packetizer (partial: LCT header word-0 YAML + optional TSI bytes in gw)",
             "MMTP packetizer",
             "Raptor10/RaptorQ FEC",
         ],
@@ -624,7 +624,7 @@ export default function EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi), optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
                         ]}
                     />
                     <BulletGroup
@@ -641,7 +641,7 @@ export default function EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0)",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -656,9 +656,11 @@ export default function EndToEndGaps() {
                             "scripts/stltp_integration_test.sh — stltp:// lab UDP strip + verify",
                             "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
                             "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
-                            "scripts/run_all_integration.sh — all sink/LLS/STLTP legs + RTCM 12×96",
+                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + RTCM 12×96",
+                            "scripts/lct_word0_integration_test.sh — word-0 then word-0+TSI + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi]",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
-                            ".github/workflows/ci.yml — same seven legs in Docker (RTCM 12×96); skips webapp/docs/pages-only diffs; workflow_dispatch",
+                            "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
+                            ".github/workflows/ci.yml — eight Docker scripts + RTCM (12×96) like image-integ-all; skips webapp/docs/pages-only diffs; workflow_dispatch",
                         ]}
                     />
                 </Grid>

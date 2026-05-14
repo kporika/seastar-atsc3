@@ -28,7 +28,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${script_dir}/_lib.sh"
 
 repo_root="$(cd "${script_dir}/.." && pwd)"
-build_dir="${1:-${repo_root}/build}"
+build_dir="${1:-$(detect_default_build_dir "${repo_root}")}"
 frames="${2:-32}"
 payload_bytes="${3:-128}"
 

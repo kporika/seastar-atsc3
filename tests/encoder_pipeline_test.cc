@@ -26,10 +26,20 @@
 #include "alp_decoder.h"
 #include "alp_types.h"
 #include "encoder_pipeline.h"
+#include "lct_rfc5651_word0_decoder.h"
 #include "tlv_mux_decoder.h"
 #include "tlv_mux_types.h"
 
 namespace {
+
+std::uint32_t read_be32_at(std::span<const std::byte> s,
+                           std::size_t off) noexcept {
+    using U = unsigned;
+    return (std::uint32_t(static_cast<U>(std::uint8_t(s[off])) << 24) |
+            std::uint32_t(static_cast<U>(std::uint8_t(s[off + 1])) << 16) |
+            std::uint32_t(static_cast<U>(std::uint8_t(s[off + 2])) << 8) |
+            std::uint32_t(static_cast<U>(std::uint8_t(s[off + 3]))));
+}
 
 bool span_equal(std::span<const std::byte> a, std::span<const std::byte> b) {
     if (a.size() != b.size()) return false;
@@ -114,6 +124,139 @@ int run_one(const char *label, const std::vector<std::byte> &payload) {
     return 0;
 }
 
+int run_lct_prefix(const char *label, std::uint8_t cp,
+                   const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline enc{atsc3::gw::with_prepended_lab_lct_word0(cp)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body = alp.value.payload;
+    if (body.size() != payload.size() + 4u) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), payload.size() + 4u);
+        return 1;
+    }
+
+    auto lct = atsc3::lct_rfc5651_word0::decode(
+        body.subspan(0, sizeof(std::uint32_t)));
+    if (!lct.ok) {
+        std::fprintf(stderr, "[%s] lct_word0 decode failed: %s\n",
+                     label, lct.error.c_str());
+        return 1;
+    }
+    if (lct.value.codepoint != cp) {
+        std::fprintf(stderr, "[%s] lct codepoint got %u want %u\n", label,
+                     static_cast<unsigned>(lct.value.codepoint),
+                     static_cast<unsigned>(cp));
+        return 1;
+    }
+    if (!span_equal(body.subspan(4),
+                    std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] payload tail mismatch\n", label);
+        return 1;
+    }
+
+    std::printf(
+        "[%s] OK (user=%zu wire=%zu cp=%u)\n", label, payload.size(),
+        wire.bytes.size(), static_cast<unsigned>(cp));
+    return 0;
+}
+
+int run_lct_prefix_tsi(const char *label, std::uint8_t cp, std::uint32_t tsi,
+                       const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline enc{
+        atsc3::gw::with_prepended_lab_lct_word0_tsi(cp, tsi)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body = alp.value.payload;
+    if (body.size() != payload.size() + 8u) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), payload.size() + 8u);
+        return 1;
+    }
+
+    auto lct = atsc3::lct_rfc5651_word0::decode(body.subspan(
+        0, sizeof(std::uint32_t)));
+    if (!lct.ok) {
+        std::fprintf(stderr, "[%s] lct_word0 decode failed: %s\n",
+                     label, lct.error.c_str());
+        return 1;
+    }
+    if (lct.value.codepoint != cp) {
+        std::fprintf(stderr, "[%s] lct codepoint got %u want %u\n", label,
+                     static_cast<unsigned>(lct.value.codepoint),
+                     static_cast<unsigned>(cp));
+        return 1;
+    }
+    if (!lct.value.tsi_flag || lct.value.header_length_words != 2) {
+        std::fprintf(stderr,
+                     "[%s] lct word0: want tsi_flag=1 header_length_words=2\n",
+                     label);
+        return 1;
+    }
+    const std::uint32_t tsi_obs = read_be32_at(body, 4);
+    if (tsi_obs != tsi) {
+        std::fprintf(stderr, "[%s] TSI BE32 got %u want %u\n", label,
+                     static_cast<unsigned>(tsi_obs),
+                     static_cast<unsigned>(tsi));
+        return 1;
+    }
+    if (!span_equal(body.subspan(8),
+                    std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] payload tail mismatch\n", label);
+        return 1;
+    }
+
+    std::printf(
+        "[%s] OK (user=%zu wire=%zu cp=%u tsi=%u)\n", label,
+        payload.size(), wire.bytes.size(), static_cast<unsigned>(cp),
+        static_cast<unsigned>(tsi));
+    return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -165,6 +308,58 @@ int main() {
             ++failures;
         } else {
             std::printf("[oversize-2048] OK (rejected: %s)\n",
+                        r.error.c_str());
+        }
+    }
+
+    // 7) RFC 5651 word-0 lab prefix rides inside ALP (M8 stitch)
+    {
+        std::vector<std::byte> p{std::byte{0xDE}, std::byte{0xAD}};
+        failures += run_lct_prefix("lct-prefix-cp42", 42, p);
+    }
+    failures += run_lct_prefix("lct-prefix-empty", 0,
+                               std::vector<std::byte>{});
+
+    // 8) with 4-byte LCT prefix, max user octets is ALP_max - 4
+    {
+        std::vector<std::byte> p(2043, std::byte{0x7E});
+        failures += run_lct_prefix("alp-max-prepend-user-2043", 0, p);
+        std::vector<std::byte> too_big(2044, std::byte{0x7E});
+        atsc3::gw::encoder_pipeline enc_bad{
+            atsc3::gw::with_prepended_lab_lct_word0(5)};
+        auto r = enc_bad.encode(std::span<const std::byte>(too_big));
+        if (r.ok) {
+            std::fprintf(stderr,
+                         "[prepend-oversize-2044] expected failure, got ok\n");
+            ++failures;
+        } else {
+            std::printf("[prepend-oversize-2044] OK (rejected: %s)\n",
+                        r.error.c_str());
+        }
+    }
+
+    // 9) word-0 + 32-bit BE TSI prefix (8-byte header + user)
+    {
+        std::vector<std::byte> p{std::byte{0xDE}, std::byte{0xAD}};
+        failures += run_lct_prefix_tsi("lct-prefix-tsi-cp43", 43, 0xAABBCCDDu, p);
+    }
+    failures +=
+        run_lct_prefix_tsi("lct-prefix-tsi-empty", 0, 0u, std::vector<std::byte>{});
+
+    // 10) with 8-byte LCT prefix, max user octets is ALP_max - 8
+    {
+        std::vector<std::byte> p(2039, std::byte{0x55});
+        failures += run_lct_prefix_tsi("alp-max-prepend-tsi-user-2039", 11, 999u, p);
+        std::vector<std::byte> too_big(2040, std::byte{0x55});
+        atsc3::gw::encoder_pipeline enc_bad{
+            atsc3::gw::with_prepended_lab_lct_word0_tsi(11, 999u)};
+        auto r = enc_bad.encode(std::span<const std::byte>(too_big));
+        if (r.ok) {
+            std::fprintf(stderr,
+                         "[prepend-tsi-oversize-2040] expected failure, got ok\n");
+            ++failures;
+        } else {
+            std::printf("[prepend-tsi-oversize-2040] OK (rejected: %s)\n",
                         r.error.c_str());
         }
     }

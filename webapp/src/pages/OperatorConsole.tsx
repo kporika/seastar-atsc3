@@ -23,15 +23,21 @@ function adminPath(path: string): string {
 
 async function adminFetch(
     path: string,
+    bearerToken: string,
     init?: RequestInit,
 ): Promise<{ ok: boolean; status: number; body: string }> {
     const url = adminPath(path);
+    const hdr: Record<string, string> = {
+        Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+        ...(init?.headers as Record<string, string>),
+    };
+    const t = bearerToken.trim();
+    if (t) {
+        hdr.Authorization = `Bearer ${t}`;
+    }
     const r = await fetch(url, {
         ...init,
-        headers: {
-            Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
-            ...(init?.headers as Record<string, string>),
-        },
+        headers: hdr,
     });
     const body = await r.text();
     return { ok: r.ok, status: r.status, body };
@@ -40,7 +46,9 @@ async function adminFetch(
 export default function OperatorConsole() {
     const [sinkUri, setSinkUri] = useState("null://");
     const [svcName, setSvcName] = useState("demo");
+    const [svcSinkUri, setSvcSinkUri] = useState("");
     const [svcId, setSvcId] = useState("1");
+    const [bearerToken, setBearerToken] = useState("");
     const [out, setOut] = useState("");
     const [busy, setBusy] = useState(false);
 
@@ -67,7 +75,9 @@ export default function OperatorConsole() {
                     <strong>--admin-http</strong>. In dev, requests go through the Vite proxy{" "}
                     <code className="mono-inline">{PROXY_PREFIX}</code> →{" "}
                     <code className="mono-inline">ATSC3_ADMIN_URL</code> (default{" "}
-                    <code className="mono-inline">http://127.0.0.1:8080</code>).
+                    <code className="mono-inline">http://127.0.0.1:8080</code>). If the gateway
+                    uses <code className="mono-inline">--admin-bearer-token</code>, paste the same
+                    value under Bearer below.
                 </Text>
                 {prodBlock && (
                     <Text tone="secondary" weight="semibold">
@@ -90,7 +100,7 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                     onClick={() =>
                                         void run("GET /config", async () => {
-                                            const r = await adminFetch("/config");
+                                            const r = await adminFetch("/config", bearerToken);
                                             return `${r.status}\n${r.body}`;
                                         })
                                     }
@@ -103,7 +113,7 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                     onClick={() =>
                                         void run("GET /services", async () => {
-                                            const r = await adminFetch("/services");
+                                            const r = await adminFetch("/services", bearerToken);
                                             return `${r.status}\n${r.body}`;
                                         })
                                     }
@@ -116,8 +126,8 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                     onClick={() =>
                                         void run("health", async () => {
-                                            const a = await adminFetch("/healthz");
-                                            const b = await adminFetch("/readyz");
+                                            const a = await adminFetch("/healthz", bearerToken);
+                                            const b = await adminFetch("/readyz", bearerToken);
                                             return `${a.status} healthz\n${a.body}\n${b.status} readyz\n${b.body}`;
                                         })
                                     }
@@ -130,7 +140,7 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                     onClick={() =>
                                         void run("GET /metrics", async () => {
-                                            const r = await adminFetch("/metrics", {
+                                            const r = await adminFetch("/metrics", bearerToken, {
                                                 headers: { Accept: "text/plain" },
                                             });
                                             return `${r.status}\n${r.body}`;
@@ -149,6 +159,21 @@ export default function OperatorConsole() {
                     <CardBody>
                         <Stack gap={12}>
                             <label className="field">
+                                <span className="field__label">
+                                    Bearer token (optional, matches gw --admin-bearer-token)
+                                </span>
+                                <input
+                                    className="field__input"
+                                    type="password"
+                                    autoComplete="off"
+                                    value={bearerToken}
+                                    onChange={(e) => setBearerToken(e.target.value)}
+                                    disabled={busy || prodBlock}
+                                    placeholder=""
+                                />
+                            </label>
+                            <Divider />
+                            <label className="field">
                                 <span className="field__label">Sink URI (POST /config/sink)</span>
                                 <input
                                     className="field__input"
@@ -163,7 +188,7 @@ export default function OperatorConsole() {
                                 disabled={busy || prodBlock}
                                 onClick={() =>
                                     void run("POST /config/sink", async () => {
-                                        const r = await adminFetch("/config/sink", {
+                                        const r = await adminFetch("/config/sink", bearerToken, {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
                                             body: JSON.stringify({ sink_uri: sinkUri }),
@@ -184,16 +209,34 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                 />
                             </label>
+                            <label className="field">
+                                <span className="field__label">
+                                    Optional sink_uri for this service (POST /ingest + service id)
+                                </span>
+                                <input
+                                    className="field__input"
+                                    value={svcSinkUri}
+                                    onChange={(e) => setSvcSinkUri(e.target.value)}
+                                    disabled={busy || prodBlock}
+                                    placeholder="empty = use default gw sink"
+                                />
+                            </label>
                             <button
                                 type="button"
                                 className="btn"
                                 disabled={busy || prodBlock}
                                 onClick={() =>
                                     void run("POST /services", async () => {
-                                        const r = await adminFetch("/services", {
+                                        const body: { name: string; sink_uri?: string } = {
+                                            name: svcName,
+                                        };
+                                        if (svcSinkUri.trim().length > 0) {
+                                            body.sink_uri = svcSinkUri.trim();
+                                        }
+                                        const r = await adminFetch("/services", bearerToken, {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ name: svcName }),
+                                            body: JSON.stringify(body),
                                         });
                                         return `${r.status}\n${r.body}`;
                                     })
@@ -202,7 +245,9 @@ export default function OperatorConsole() {
                                 Add service
                             </button>
                             <label className="field">
-                                <span className="field__label">Service id (DELETE)</span>
+                                <span className="field__label">
+                                    Service id (DELETE / PATCH sink)
+                                </span>
                                 <input
                                     className="field__input"
                                     value={svcId}
@@ -210,22 +255,48 @@ export default function OperatorConsole() {
                                     disabled={busy || prodBlock}
                                 />
                             </label>
-                            <button
-                                type="button"
-                                className="btn btn--danger"
-                                disabled={busy || prodBlock}
-                                onClick={() =>
-                                    void run("DELETE /services", async () => {
-                                        const r = await adminFetch(
-                                            `/services?id=${encodeURIComponent(svcId)}`,
-                                            { method: "DELETE" },
-                                        );
-                                        return `${r.status}\n${r.body}`;
-                                    })
-                                }
-                            >
-                                Delete service
-                            </button>
+                            <Row gap={8} wrap>
+                                <button
+                                    type="button"
+                                    className="btn"
+                                    disabled={busy || prodBlock}
+                                    onClick={() =>
+                                        void run("PATCH clear service sink_uri", async () => {
+                                            const r = await adminFetch(
+                                                `/services?id=${encodeURIComponent(svcId)}`,
+                                                bearerToken,
+                                                {
+                                                    method: "PATCH",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                    },
+                                                    body: JSON.stringify({ sink_uri: null }),
+                                                },
+                                            );
+                                            return `${r.status}\n${r.body}`;
+                                        })
+                                    }
+                                >
+                                    PATCH clear sink routing
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn--danger"
+                                    disabled={busy || prodBlock}
+                                    onClick={() =>
+                                        void run("DELETE /services", async () => {
+                                            const r = await adminFetch(
+                                                `/services?id=${encodeURIComponent(svcId)}`,
+                                                bearerToken,
+                                                { method: "DELETE" },
+                                            );
+                                            return `${r.status}\n${r.body}`;
+                                        })
+                                    }
+                                >
+                                    Delete service
+                                </button>
+                            </Row>
                         </Stack>
                     </CardBody>
                 </Card>
@@ -240,9 +311,11 @@ export default function OperatorConsole() {
 
             <H2>CLI</H2>
             <Text tone="secondary" size="small">
-                Same surface from the repo:{" "}
-                <code className="mono-inline">python3 tools/atsc3ctl.py --help</code> (or{" "}
-                <code className="mono-inline">ATSC3_ADMIN=http://127.0.0.1:8080</code>).
+                Same surface via{" "}
+                <code className="mono-inline">python3 tools/atsc3ctl.py --help</code>: set{" "}
+                <code className="mono-inline">ATSC3_ADMIN</code>, and{" "}
+                <code className="mono-inline">ATSC3_ADMIN_TOKEN</code> when the gw uses bearer
+                auth.
             </Text>
         </Stack>
     );

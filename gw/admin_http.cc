@@ -7,11 +7,11 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 #include <charconv>
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -35,6 +35,28 @@ namespace atsc3::gw {
 
 namespace {
 
+struct GwHttpAdminConfigSnap {
+    std::string ingress;
+    std::string sink_uri;
+    std::optional<std::string> services_state_file;
+    bool prepend_lct_word0 = false;
+    std::uint8_t lct_codepoint = 0;
+    bool lct_include_tsi = false;
+    std::uint32_t lct_tsi = 0;
+};
+
+inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
+    GwHttpAdminConfigSnap o{};
+    o.ingress               = s.ingress_listen_string();
+    o.sink_uri              = std::string(s.sink_uri());
+    o.services_state_file = s.services_state_file_path();
+    o.prepend_lct_word0     = s.encoder_prepends_lct_word0();
+    o.lct_codepoint         = s.encoder_lct_codepoint();
+    o.lct_include_tsi       = s.encoder_lct_includes_tsi();
+    o.lct_tsi               = s.encoder_lct_tsi();
+    return o;
+}
+
 seastar::logger alog("admin_http");
 
 class index_handler final : public seastar::httpd::handler_base {
@@ -47,7 +69,7 @@ public:
         rep->write_body(
             "json",
             seastar::sstring(
-                R"({"service":"atsc3_gw","endpoints":["GET /","GET /healthz","GET /readyz","GET /metrics","GET /config","PATCH /config","PUT /config","POST /config/sink","GET /services","POST /ingest","POST /services","DELETE /services?id=<uint>"]})"));
+                R"({"service":"atsc3_gw","endpoints":["GET /","GET /healthz","GET /readyz","GET /metrics","GET /config","PATCH /config","PUT /config","POST /config/sink","GET /services","POST /ingest","POST /services","PATCH /services?id=<uint>","DELETE /services?id=<uint>"]})"));
         return seastar::make_ready_future<std::unique_ptr<seastar::http::reply>>(
             std::move(rep));
     }
@@ -124,6 +146,18 @@ std::string trim_http_json_string(std::string_view sv) {
     return std::string(sv);
 }
 
+std::string_view trim_sv_sv(std::string_view sv) {
+    while (!sv.empty() &&
+           std::isspace(static_cast<unsigned char>(sv.front()))) {
+        sv.remove_prefix(1);
+    }
+    while (!sv.empty() &&
+           std::isspace(static_cast<unsigned char>(sv.back()))) {
+        sv.remove_suffix(1);
+    }
+    return sv;
+}
+
 seastar::sstring json_quote_err(seastar::sstring msg) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> w(buf);
@@ -132,6 +166,57 @@ seastar::sstring json_quote_err(seastar::sstring msg) {
     w.String(msg.c_str(), static_cast<rapidjson::SizeType>(msg.size()));
     w.EndObject();
     return seastar::sstring(buf.GetString(), buf.GetSize());
+}
+
+static bool bearer_prefix_caseless(std::string_view s, std::string_view pref) {
+    if (s.size() < pref.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < pref.size(); ++i) {
+        const unsigned char a = static_cast<unsigned char>(s[i]);
+        const unsigned char b = static_cast<unsigned char>(pref[i]);
+        if (std::tolower(a) != std::tolower(b)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// When `bearer_expect` is non-empty, require `Authorization: Bearer <exact token>`.
+/// Returns false and sets `rep` to 401 when unauthorized.
+static bool mutating_bearer_authorized(
+    const std::optional<std::string>& bearer_expect,
+    seastar::http::request* req,
+    std::unique_ptr<seastar::http::reply>& rep) {
+    if (!bearer_expect || bearer_expect->empty()) {
+        return true;
+    }
+
+    seastar::sstring raw = req->get_header(seastar::sstring{"Authorization"});
+    if (raw.empty()) {
+        raw = req->get_header(seastar::sstring{"authorization"});
+    }
+    std::string_view hv(raw.begin(), raw.end());
+    hv = trim_sv_sv(hv);
+    static constexpr std::string_view pref = "Bearer";
+    const bool hdr_ok =
+        hv.size() > pref.size() && bearer_prefix_caseless(hv.substr(0, pref.size()), pref)
+        && std::isspace(static_cast<unsigned char>(hv[pref.size()]));
+
+    std::string_view tok{};
+    if (hdr_ok) {
+        tok = trim_sv_sv(hv.substr(pref.size() + 1));
+    }
+
+    if (!hdr_ok || tok != std::string_view(bearer_expect->data(), bearer_expect->size())) {
+        rep->set_status(seastar::http::reply::status_type::unauthorized);
+        rep->write_body(
+            "json",
+            json_quote_err(
+                seastar::sstring("Authorization: Bearer <token> required")));
+        return false;
+    }
+    return true;
 }
 
 seastar::future<seastar::sstring> read_http_body(
@@ -247,35 +332,51 @@ private:
 
 class config_handler final : public seastar::httpd::handler_base {
 public:
-    explicit config_handler(seastar::sharded<gw_server>* gw) : _gw(gw) {}
+    explicit config_handler(seastar::sharded<gw_server>* gw, bool tls_enabled,
+                           bool bearer_configured)
+        : _gw(gw), _tls_admin(tls_enabled), _bearer_configured(bearer_configured) {}
 
     seastar::future<std::unique_ptr<seastar::http::reply>> handle(
         const seastar::sstring& /*path*/,
         std::unique_ptr<seastar::http::request> /*req*/,
         std::unique_ptr<seastar::http::reply> rep) override {
         const auto snap = co_await _gw->invoke_on(0, [](const gw_server& s) {
-            return seastar::make_ready_future<
-                std::tuple<std::string, std::string, std::optional<std::string>>>(
-                std::tuple<std::string, std::string, std::optional<std::string>>{
-                    s.ingress_listen_string(), std::string(s.sink_uri()),
-                    s.services_state_file_path()});
+            return seastar::make_ready_future<GwHttpAdminConfigSnap>(
+                gw_http_take_admin_config(s));
         });
 
         rapidjson::StringBuffer buf;
         rapidjson::Writer<rapidjson::StringBuffer> w(buf);
         w.StartObject();
         w.Key("ingress");
-        w.String(std::get<0>(snap).c_str(),
-                 static_cast<rapidjson::SizeType>(std::get<0>(snap).size()));
+        w.String(snap.ingress.c_str(),
+                 static_cast<rapidjson::SizeType>(snap.ingress.size()));
         w.Key("sink_uri");
-        w.String(std::get<1>(snap).c_str(),
-                 static_cast<rapidjson::SizeType>(std::get<1>(snap).size()));
+        w.String(snap.sink_uri.c_str(),
+                 static_cast<rapidjson::SizeType>(snap.sink_uri.size()));
         w.Key("services_state_file");
-        if (const auto& sf = std::get<2>(snap)) {
+        if (const auto& sf = snap.services_state_file) {
             w.String(sf->c_str(), static_cast<rapidjson::SizeType>(sf->size()));
         } else {
             w.Null();
         }
+        w.Key("prepend_lct_word0");
+        w.Bool(snap.prepend_lct_word0);
+        w.Key("lct_codepoint");
+        w.Uint(static_cast<unsigned>(snap.lct_codepoint));
+        w.Key("lct_include_tsi");
+        w.Bool(snap.lct_include_tsi);
+        w.Key("lct_tsi");
+        w.Uint64(static_cast<std::uint64_t>(snap.lct_tsi));
+        w.Key("admin");
+        w.StartObject();
+        w.Key("operator_schema_version");
+        w.Uint(2);
+        w.Key("tls");
+        w.Bool(_tls_admin);
+        w.Key("bearer_auth_required");
+        w.Bool(_bearer_configured);
+        w.EndObject();
         w.EndObject();
 
         rep->set_status(seastar::http::reply::status_type::ok);
@@ -286,16 +387,28 @@ public:
 
 private:
     seastar::sharded<gw_server>* _gw;
+    bool _tls_admin = false;
+    bool _bearer_configured = false;
 };
 
 class patch_config_handler final : public seastar::httpd::handler_base {
 public:
-    explicit patch_config_handler(seastar::sharded<gw_server>* gw) : _gw(gw) {}
+    patch_config_handler(seastar::sharded<gw_server>* gw,
+                         std::optional<std::string> bearer_expect,
+                         bool tls_admin, bool bearer_configured)
+        : _gw(gw),
+          _bearer_expect(std::move(bearer_expect)),
+          _tls_admin(tls_admin),
+          _bearer_configured(bearer_configured) {}
 
     seastar::future<std::unique_ptr<seastar::http::reply>> handle(
         const seastar::sstring& /*path*/,
         std::unique_ptr<seastar::http::request> req,
         std::unique_ptr<seastar::http::reply> rep) override {
+        if (!mutating_bearer_authorized(_bearer_expect, req.get(), rep)) {
+            co_return std::move(rep);
+        }
+
         auto body = co_await read_http_body(req);
         if (body.empty()) {
             rep->set_status(seastar::http::reply::status_type::bad_request);
@@ -372,28 +485,42 @@ public:
         }
 
         const auto snap = co_await _gw->invoke_on(0, [](const gw_server& s) {
-            return seastar::make_ready_future<
-                std::tuple<std::string, std::string, std::optional<std::string>>>(
-                std::tuple<std::string, std::string, std::optional<std::string>>{
-                    s.ingress_listen_string(), std::string(s.sink_uri()),
-                    s.services_state_file_path()});
+            return seastar::make_ready_future<GwHttpAdminConfigSnap>(
+                gw_http_take_admin_config(s));
         });
 
         rapidjson::StringBuffer buf;
         rapidjson::Writer<rapidjson::StringBuffer> w(buf);
         w.StartObject();
         w.Key("ingress");
-        w.String(std::get<0>(snap).c_str(),
-                 static_cast<rapidjson::SizeType>(std::get<0>(snap).size()));
+        w.String(snap.ingress.c_str(),
+                 static_cast<rapidjson::SizeType>(snap.ingress.size()));
         w.Key("sink_uri");
-        w.String(std::get<1>(snap).c_str(),
-                 static_cast<rapidjson::SizeType>(std::get<1>(snap).size()));
+        w.String(snap.sink_uri.c_str(),
+                 static_cast<rapidjson::SizeType>(snap.sink_uri.size()));
         w.Key("services_state_file");
-        if (const auto& sf = std::get<2>(snap)) {
+        if (const auto& sf = snap.services_state_file) {
             w.String(sf->c_str(), static_cast<rapidjson::SizeType>(sf->size()));
         } else {
             w.Null();
         }
+        w.Key("prepend_lct_word0");
+        w.Bool(snap.prepend_lct_word0);
+        w.Key("lct_codepoint");
+        w.Uint(static_cast<unsigned>(snap.lct_codepoint));
+        w.Key("lct_include_tsi");
+        w.Bool(snap.lct_include_tsi);
+        w.Key("lct_tsi");
+        w.Uint64(static_cast<std::uint64_t>(snap.lct_tsi));
+        w.Key("admin");
+        w.StartObject();
+        w.Key("operator_schema_version");
+        w.Uint(2);
+        w.Key("tls");
+        w.Bool(_tls_admin);
+        w.Key("bearer_auth_required");
+        w.Bool(_bearer_configured);
+        w.EndObject();
         w.EndObject();
 
         rep->set_status(seastar::http::reply::status_type::ok);
@@ -404,6 +531,9 @@ public:
 
 private:
     seastar::sharded<gw_server>* _gw;
+    std::optional<std::string> _bearer_expect;
+    bool _tls_admin = false;
+    bool _bearer_configured = false;
 };
 
 class services_get_handler final : public seastar::httpd::handler_base {
@@ -431,6 +561,13 @@ public:
             w.Key("name");
             w.String(e.name.c_str(),
                      static_cast<rapidjson::SizeType>(e.name.size()));
+            w.Key("sink_uri");
+            if (e.sink_uri.has_value()) {
+                w.String(e.sink_uri->c_str(),
+                         static_cast<rapidjson::SizeType>(e.sink_uri->size()));
+            } else {
+                w.Null();
+            }
             w.EndObject();
         }
         w.EndArray();
@@ -448,12 +585,18 @@ private:
 
 class services_post_handler final : public seastar::httpd::handler_base {
 public:
-    explicit services_post_handler(seastar::sharded<gw_server>* gw) : _gw(gw) {}
+    explicit services_post_handler(seastar::sharded<gw_server>* gw,
+                                   std::optional<std::string> bearer_expect)
+        : _gw(gw), _bearer_expect(std::move(bearer_expect)) {}
 
     seastar::future<std::unique_ptr<seastar::http::reply>> handle(
         const seastar::sstring& /*path*/,
         std::unique_ptr<seastar::http::request> req,
         std::unique_ptr<seastar::http::reply> rep) override {
+        if (!mutating_bearer_authorized(_bearer_expect, req.get(), rep)) {
+            co_return std::move(rep);
+        }
+
         auto body = co_await read_http_body(req);
         if (body.empty()) {
             rep->set_status(seastar::http::reply::status_type::bad_request);
@@ -477,15 +620,34 @@ public:
 
         std::string name(doc["name"].GetString(), doc["name"].GetStringLength());
 
-        auto r = co_await _gw->invoke_on(0, [name = std::move(name)](
-                                                 gw_server& s) mutable
-                                             -> seastar::future<admin_service_add_result> {
-            auto r = s.add_admin_service(std::move(name));
-            if (r.ok) {
-                co_await s.persist_admin_services_if_configured();
+        std::optional<std::string> sink_uri{};
+        if (doc.HasMember("sink_uri")) {
+            const auto& sj = doc["sink_uri"];
+            if (!sj.IsString() && !sj.IsNull()) {
+                rep->set_status(seastar::http::reply::status_type::bad_request);
+                rep->write_body("json",
+                                json_quote_err("sink_uri must be a string or null"));
+                co_return std::move(rep);
             }
-            co_return r;
-        });
+            if (sj.IsString()) {
+                std::string u = trim_http_json_string(std::string_view(
+                    sj.GetString(), sj.GetStringLength()));
+                if (!u.empty()) {
+                    sink_uri = std::move(u);
+                }
+            }
+        }
+
+        auto r =
+            co_await _gw->invoke_on(0, [name = std::move(name), sink_uri](
+                                           gw_server& s) mutable
+                                       -> seastar::future<admin_service_add_result> {
+                auto r = co_await s.add_admin_service(std::move(name), sink_uri);
+                if (r.ok) {
+                    co_await s.persist_admin_services_if_configured();
+                }
+                co_return r;
+            });
 
         if (!r.ok) {
             const bool conflict = (r.error == "duplicate name");
@@ -503,6 +665,14 @@ public:
         w.Key("name");
         w.String(r.accepted_name.c_str(),
                  static_cast<rapidjson::SizeType>(r.accepted_name.size()));
+        w.Key("sink_uri");
+        if (r.accepted_sink_uri.has_value()) {
+            w.String(r.accepted_sink_uri->c_str(),
+                     static_cast<rapidjson::SizeType>(
+                         r.accepted_sink_uri->size()));
+        } else {
+            w.Null();
+        }
         w.EndObject();
 
         rep->set_status(seastar::http::reply::status_type::created);
@@ -512,16 +682,22 @@ public:
 
 private:
     seastar::sharded<gw_server>* _gw;
+    std::optional<std::string> _bearer_expect;
 };
 
 class services_delete_handler final : public seastar::httpd::handler_base {
 public:
-    explicit services_delete_handler(seastar::sharded<gw_server>* gw) : _gw(gw) {}
+    explicit services_delete_handler(seastar::sharded<gw_server>* gw,
+                                     std::optional<std::string> bearer_expect)
+        : _gw(gw), _bearer_expect(std::move(bearer_expect)) {}
 
     seastar::future<std::unique_ptr<seastar::http::reply>> handle(
         const seastar::sstring& /*path*/,
         std::unique_ptr<seastar::http::request> req,
         std::unique_ptr<seastar::http::reply> rep) override {
+        if (!mutating_bearer_authorized(_bearer_expect, req.get(), rep)) {
+            co_return std::move(rep);
+        }
         const seastar::sstring id_s = req->get_query_param("id");
         if (id_s.empty()) {
             rep->set_status(seastar::http::reply::status_type::bad_request);
@@ -538,10 +714,9 @@ public:
             co_return std::move(rep);
         }
 
-        const bool removed = co_await _gw->invoke_on(0, [id = *parsed](
-                                                         gw_server& s)
-                                                     -> seastar::future<bool> {
-            const bool ok = s.remove_admin_service(id);
+        const bool removed = co_await _gw->invoke_on(0, [id = *parsed](gw_server& s)
+                                                       -> seastar::future<bool> {
+            const bool ok = co_await s.remove_admin_service(id);
             if (ok) {
                 co_await s.persist_admin_services_if_configured();
             }
@@ -569,16 +744,127 @@ public:
 
 private:
     seastar::sharded<gw_server>* _gw;
+    std::optional<std::string> _bearer_expect;
 };
 
-class ingest_handler final : public seastar::httpd::handler_base {
+class services_patch_sink_handler final : public seastar::httpd::handler_base {
 public:
-    explicit ingest_handler(seastar::sharded<gw_server>* gw) : _gw(gw) {}
+    explicit services_patch_sink_handler(seastar::sharded<gw_server>* gw,
+                                         std::optional<std::string> bearer_expect)
+        : _gw(gw), _bearer_expect(std::move(bearer_expect)) {}
 
     seastar::future<std::unique_ptr<seastar::http::reply>> handle(
         const seastar::sstring& /*path*/,
         std::unique_ptr<seastar::http::request> req,
         std::unique_ptr<seastar::http::reply> rep) override {
+        if (!mutating_bearer_authorized(_bearer_expect, req.get(), rep)) {
+            co_return std::move(rep);
+        }
+
+        const seastar::sstring id_s = req->get_query_param("id");
+        if (id_s.empty()) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body("json", json_quote_err("missing id query parameter"));
+            co_return std::move(rep);
+        }
+        const std::string_view id_sv(id_s.begin(), id_s.end());
+        const auto parsed = parse_decimal_u32_strict(id_sv);
+        if (!parsed) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body(
+                "json",
+                json_quote_err("id must be a decimal uint32 (no extra characters)"));
+            co_return std::move(rep);
+        }
+
+        auto body = co_await read_http_body(req);
+        if (body.empty()) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body("json", json_quote_err("empty body"));
+            co_return std::move(rep);
+        }
+
+        rapidjson::Document doc;
+        doc.Parse(body.begin(), body.size());
+        if (doc.HasParseError() || !doc.IsObject()) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body("json", json_quote_err("invalid JSON"));
+            co_return std::move(rep);
+        }
+
+        if (doc.MemberCount() != 1u || !doc.HasMember("sink_uri")) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body("json",
+                            json_quote_err("body must contain only {\"sink_uri\": …} "
+                                           "(null clears per-service routing)"));
+            co_return std::move(rep);
+        }
+
+        const auto& sj = doc["sink_uri"];
+        if (!sj.IsString() && !sj.IsNull()) {
+            rep->set_status(seastar::http::reply::status_type::bad_request);
+            rep->write_body("json",
+                            json_quote_err("sink_uri must be a string or null"));
+            co_return std::move(rep);
+        }
+
+        bool clearing = sj.IsNull();
+        std::optional<std::string> uri_if_set;
+        if (!clearing) {
+            uri_if_set.emplace(trim_http_json_string(std::string_view(
+                sj.GetString(), sj.GetStringLength())));
+            if (uri_if_set->empty()) {
+                uri_if_set.reset();
+                clearing = true;
+            }
+        }
+
+        auto err_msg =
+            co_await _gw->invoke_on(0,
+                                    [id = *parsed, clearing, uri_if_set](gw_server& s)
+                                        -> seastar::future<std::optional<std::string>> {
+                                        const auto patch_err = co_await s.patch_admin_service_sink(
+                                            id, clearing, uri_if_set);
+                                        if (!patch_err) {
+                                            co_await s.persist_admin_services_if_configured();
+                                        }
+                                        co_return patch_err;
+                                    });
+        if (err_msg) {
+            if (*err_msg == "unknown service id") {
+                rep->set_status(seastar::http::reply::status_type::not_found);
+            } else {
+                rep->set_status(seastar::http::reply::status_type::bad_request);
+            }
+            rep->write_body("json",
+                            json_quote_err(seastar::sstring(*err_msg)));
+            co_return std::move(rep);
+        }
+
+        rep->set_status(seastar::http::reply::status_type::ok);
+        rep->write_body("json", seastar::sstring(R"({"ok":true})"));
+        co_return std::move(rep);
+    }
+
+private:
+    seastar::sharded<gw_server>* _gw;
+    std::optional<std::string> _bearer_expect;
+};
+
+class ingest_handler final : public seastar::httpd::handler_base {
+public:
+    explicit ingest_handler(seastar::sharded<gw_server>* gw,
+                            std::optional<std::string> bearer_expect)
+        : _gw(gw), _bearer_expect(std::move(bearer_expect)) {}
+
+    seastar::future<std::unique_ptr<seastar::http::reply>> handle(
+        const seastar::sstring& /*path*/,
+        std::unique_ptr<seastar::http::request> req,
+        std::unique_ptr<seastar::http::reply> rep) override {
+        if (!mutating_bearer_authorized(_bearer_expect, req.get(), rep)) {
+            co_return std::move(rep);
+        }
+
         auto body = co_await read_http_body(req);
         if (body.empty()) {
             rep->set_status(seastar::http::reply::status_type::bad_request);
@@ -600,6 +886,7 @@ public:
             co_return std::move(rep);
         }
 
+        std::optional<std::uint32_t> ingest_sid;
         if (doc.HasMember("service_id")) {
             const auto& sidv = doc["service_id"];
             if (sidv.IsNull()) {
@@ -631,6 +918,7 @@ public:
                 rep->write_body("json", json_quote_err("unknown service_id"));
                 co_return std::move(rep);
             }
+            ingest_sid = sid;
         }
 
         std::string_view type = "raw";
@@ -660,9 +948,10 @@ public:
             std::memcpy(tb.get_write(), decoded->data(), decoded->size());
         }
 
-        co_await _gw->invoke_on(0, [buf = std::move(tb)](gw_server& s) mutable {
-            return s.ingest_payload(std::move(buf));
-        });
+        co_await _gw->invoke_on(0,
+                                 [buf = std::move(tb), ingest_sid](gw_server& s) mutable {
+                                     return s.ingest_payload(std::move(buf), ingest_sid);
+                                 });
 
         rep->set_status(seastar::http::reply::status_type::accepted);
         rep->write_body("json", seastar::sstring(R"({"ok":true})"));
@@ -671,14 +960,22 @@ public:
 
 private:
     seastar::sharded<gw_server>* _gw;
+    std::optional<std::string> _bearer_expect;
 };
 
 }  // namespace
 
 seastar::future<> admin_http_listen(seastar::httpd::http_server_control& ctl,
                                     seastar::sharded<gw_server>& gw,
-                                    seastar::socket_address addr) {
-    co_await ctl.set_routes([&gw](seastar::httpd::routes& r) {
+                                    seastar::socket_address addr,
+                                    admin_listen_options listen_opts) {
+    const std::optional<std::string> bearer_copy = listen_opts.bearer_token;
+    const bool bearer_configured =
+        bearer_copy.has_value() && !bearer_copy->empty();
+    const bool tls_admin = static_cast<bool>(listen_opts.tls_credentials);
+
+    co_await ctl.set_routes([&gw, bearer_copy, tls_admin, bearer_configured](
+                                seastar::httpd::routes& r) {
         r.put(seastar::httpd::operation_type::GET,
               seastar::sstring("/"), new index_handler());
         r.put(seastar::httpd::operation_type::GET,
@@ -687,35 +984,51 @@ seastar::future<> admin_http_listen(seastar::httpd::http_server_control& ctl,
               seastar::sstring("/readyz"), new ready_handler(&gw));
         r.put(seastar::httpd::operation_type::GET,
               seastar::sstring("/metrics"), new metrics_handler(&gw));
-        // Match-rule registration: some deployments saw 404 on /config with put()
-        // alone; add() is the documented alternate for path handlers.
         r.add(seastar::httpd::operation_type::GET,
               seastar::httpd::url("/config"),
-              new config_handler(&gw));
+              new config_handler(&gw, tls_admin, bearer_configured));
         r.add(seastar::httpd::operation_type::PATCH,
               seastar::httpd::url("/config"),
-              new patch_config_handler(&gw));
+              new patch_config_handler(&gw, bearer_copy, tls_admin,
+                                       bearer_configured));
         r.add(seastar::httpd::operation_type::PUT,
               seastar::httpd::url("/config"),
-              new patch_config_handler(&gw));
+              new patch_config_handler(&gw, bearer_copy, tls_admin,
+                                       bearer_configured));
         r.add(seastar::httpd::operation_type::POST,
               seastar::httpd::url("/config/sink"),
-              new patch_config_handler(&gw));
+              new patch_config_handler(&gw, bearer_copy, tls_admin,
+                                       bearer_configured));
         r.put(seastar::httpd::operation_type::GET,
               seastar::sstring("/services"), new services_get_handler(&gw));
         r.put(seastar::httpd::operation_type::POST,
-              seastar::sstring("/services"), new services_post_handler(&gw));
+              seastar::sstring("/services"),
+              new services_post_handler(&gw, bearer_copy));
+        r.put(seastar::httpd::operation_type::PATCH,
+              seastar::sstring("/services"),
+              new services_patch_sink_handler(&gw, bearer_copy));
         r.put(seastar::httpd::operation_type::DELETE,
-              seastar::sstring("/services"), new services_delete_handler(&gw));
+              seastar::sstring("/services"),
+              new services_delete_handler(&gw, bearer_copy));
         r.put(seastar::httpd::operation_type::POST,
-              seastar::sstring("/ingest"), new ingest_handler(&gw));
+              seastar::sstring("/ingest"),
+              new ingest_handler(&gw, bearer_copy));
     });
 
-    co_await ctl.listen(addr);
+    if (listen_opts.tls_credentials) {
+        co_await ctl.listen(addr, listen_opts.tls_credentials);
+    } else {
+        co_await ctl.listen(addr);
+    }
+
+    const char* proto = listen_opts.tls_credentials ? "HTTPS" : "HTTP";
     alog.info(
-        "admin HTTP on {} (GET / /healthz /readyz /metrics /config PATCH+PUT /config POST /config/sink /services, "
-        "POST /ingest /services, DELETE /services?id=)",
-        addr);
+        "admin {} on {} (/ /healthz /readyz /metrics /config + sink swap, "
+        "/services + PATCH ?id=, POST /ingest{}{})",
+        proto,
+        addr,
+        bearer_configured ? ", bearer auth on mutators" : "",
+        tls_admin ? ", TLS enabled" : "");
 }
 
 }  // namespace atsc3::gw

@@ -7,13 +7,16 @@
 #
 # Resolves binaries in this order:
 #   1) $ATSC3_GW / $MMT_PROBE env vars (if set, must be executable paths)
-#   2) ${1:-./build}/{gw,mmt_probe}/{atsc3_gw,mmt_probe}  (dev-tree layout)
+#   2) ${build_dir}/… from detect_default_build_dir (./build preferred, else ./build-docker;
+#      override with ATSC3_BUILD_DIR or explicit script arg).
+
 #   3) anything on $PATH                                  (installed layout,
 #                                                          e.g. inside the
 #                                                          atsc3-proto image)
 #
 # Usage:
-#   scripts/integration_test.sh                # dev tree, build dir = ./build
+#   scripts/integration_test.sh                # dev tree — ./build then ./build-docker
+#   ATSC3_BUILD_DIR=build-docker scripts/integration_test.sh
 #   scripts/integration_test.sh /custom/build  # dev tree, custom build dir
 #   ATSC3_GW=/usr/local/bin/atsc3_gw \         # explicit override
 #     MMT_PROBE=/usr/local/bin/mmt_probe scripts/integration_test.sh
@@ -24,7 +27,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${script_dir}/_lib.sh"
 
 repo_root="$(cd "${script_dir}/.." && pwd)"
-build_dir="${1:-${repo_root}/build}"
+build_dir="${1:-$(detect_default_build_dir "${repo_root}")}"
 
 gw_bin="$(resolve_bin "${ATSC3_GW:-}"  "${build_dir}/gw/atsc3_gw"          atsc3_gw)"
 probe_bin="$(resolve_bin "${MMT_PROBE:-}" "${build_dir}/mmt_probe/mmt_probe" mmt_probe)"
