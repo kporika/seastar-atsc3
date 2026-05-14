@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Lab stub only — not a complete ATSC A/331 SLT instance; use with tools/m9_lls_pack.py + lls:// sink. -->
+<ScheduledSLT xmlns="tag:atsc.org,2016:XMLSchemas/ATSC3/Delivery/SYSSIG/SLT/1.0/">
+  <SLT/>
+</ScheduledSLT>

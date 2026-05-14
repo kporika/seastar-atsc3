@@ -61,8 +61,8 @@ const STACK: ReadonlyArray<{
 }> = [
     {
         layer: "Operator UI / API",
-        blurb: 'How a human or upstream system says "broadcast this"',
-        status: "missing",
+        blurb: 'How a human or upstream system says "broadcast this" — HTTP admin stub ships (POST /config/sink, /ingest, /services, …)',
+        status: "in-flight",
     },
     {
         layer: "Content packaging",
@@ -81,8 +81,8 @@ const STACK: ReadonlyArray<{
     },
     {
         layer: "Network (UDP/IP)",
-        blurb: "Multicast IP packet building per service / signaling flow",
-        status: "missing",
+        blurb: "Multicast IP packet building per service / signaling flow — IPv4+UDP builder in lib/runtime",
+        status: "in-flight",
     },
     {
         layer: "Link layer (ALP + TLV-mux)",
@@ -115,6 +115,8 @@ type GapRow = {
     component: string;
     status: Status;
     notes: string;
+    /** When true, row is included in the "Declared repo roadmap (A/330 lab link layer)" stats below. */
+    roadmap?: boolean;
 };
 
 const GAPS: ReadonlyArray<GapRow> = [
@@ -130,15 +132,17 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "UI / API",
         spec: "—",
         component: "REST or gRPC control API",
-        status: "missing",
-        notes: "POST /services, /sources, /signaling/lls, GET /stats",
+        status: "in-flight",
+        notes:
+            "--admin-http: POST /ingest, GET /metrics, GET /config, POST /config/sink + PATCH/PUT /config (body {\"sink_uri\"} only), GET/POST/DELETE /services, GET /healthz /readyz; optional service_id on ingest when set; --services-state-file persists /services; per-service sink routing + TLS still missing",
     },
     {
         layer: "UI / API",
         spec: "—",
         component: "Service config persistence",
-        status: "missing",
-        notes: "YAML or SQLite — survives restarts; schema-versioned",
+        status: "in-flight",
+        notes:
+            "Optional --services-state-file JSON for /services (shard 0); full operator YAML/SQLite + schema versioning still missing",
     },
     // --- content sources ---
     {
@@ -174,8 +178,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Signaling",
         spec: "A/331 §6",
         component: "LLS framing + SLT",
-        status: "missing",
-        notes: "32-bit header + GZIPed XML on 224.0.23.60:4937",
+        status: "in-flight",
+        notes:
+            "Table 6.1 + gzip via lls:// sink; lls_table6_1.hh; tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml; SLT scheduler / full A/331 not built",
     },
     {
         layer: "Signaling",
@@ -232,8 +237,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Network",
         spec: "RFC 768 + RFC 791",
         component: "UDP / IPv4 builder + checksums",
-        status: "missing",
-        notes: "Trivial codegen target; multicast addr per service",
+        status: "in-flight",
+        notes:
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ROUTE/LCT/MMTP not implemented",
     },
     // --- link (this is us) ---
     {
@@ -241,6 +247,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         spec: "A/330 §5.2",
         component: "ALP base header (16-bit)",
         status: "done",
+        roadmap: true,
         notes: "Single packet_type, opaque payload, ≤ 2047 B (M3)",
     },
     {
@@ -262,6 +269,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         spec: "A/330 Annex A",
         component: "TLV multiplex (single packet)",
         status: "done",
+        roadmap: true,
         notes: "Single packet, 16-bit length, opaque payload (M3)",
     },
     {
@@ -269,6 +277,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         spec: "A/330 Annex A",
         component: "TLV-mux frame composition (N packets)",
         status: "done",
+        roadmap: true,
         notes: "M6 nested-protocol via repeated:; tlv_mux_frame.yaml",
     },
     // --- broadcast gateway → exciter ---
@@ -297,8 +306,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Gateway↔Exc",
         spec: "A/324",
         component: "STLTP packetizer (UDP wire)",
-        status: "missing",
-        notes: "{BBP-per-PLP, L1B, L1D, Time, Preamble}",
+        status: "in-flight",
+        notes:
+            "M10 wire format still missing; stltp://host:port lab wrap of TLV-mux in gw/sink.cc",
     },
     {
         layer: "Gateway↔Exc",
@@ -362,8 +372,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Ops",
         spec: "—",
         component: "Prometheus / OpenTelemetry metrics",
-        status: "missing",
-        notes: "bytes_in, payloads, encode_errors per shard / PLP / service",
+        status: "in-flight",
+        notes:
+            "GET /metrics text exposition when --admin-http is set (aggregate counters); OTEL + PLP/service labels missing",
     },
     {
         layer: "Ops",
@@ -376,8 +387,8 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Ops",
         spec: "—",
         component: "Health + readiness probes",
-        status: "missing",
-        notes: "/healthz, /readyz for orchestrators",
+        status: "in-flight",
+        notes: "GET /healthz and GET /readyz on the --admin-http bind address",
     },
 ];
 
@@ -400,8 +411,12 @@ const ROADMAP: ReadonlyArray<{
             "Replaces the current TCP-only ingress with a first-class operator surface: declare a " +
             "service, attach a content source, push it. Includes a CLI (atsc3ctl) and a thin web UI " +
             "as the smallest deliverable that an operator can actually use.",
-        unlocks: 'A human (or upstream system) can say "broadcast this"',
-        closes: ["Web UI", "REST/gRPC API", "Service config persistence"],
+        unlocks: 'A human (or upstream system) can say "broadcast this" (HTTP admin + optional service JSON today; POST /config/sink or PATCH/PUT /config for sink_uri)',
+        closes: [
+            "Web UI",
+            "REST/gRPC API (partial: incl. POST /config/sink + PATCH/PUT /config for sink only)",
+            "Service config persistence (partial: --services-state-file)",
+        ],
     },
     {
         id: "M8",
@@ -507,6 +522,15 @@ export default function Atsc3EndToEndGaps() {
     const inScopeTotal = doneGaps + missingGaps + partialGaps;
     const pctDone = Math.round((doneGaps / inScopeTotal) * 100);
 
+    const roadmapRows = GAPS.filter((g) => g.roadmap === true);
+    const roadmapDone = roadmapRows.filter((g) => g.status === "done").length;
+    const roadmapOpen = roadmapRows.filter(
+        (g) => g.status === "missing" || g.status === "in-flight"
+    ).length;
+    const roadmapTotal = roadmapRows.length;
+    const pctRoadmap =
+        roadmapTotal > 0 ? Math.round((roadmapDone / roadmapTotal) * 100) : 0;
+
     return (
         <Stack gap={28}>
             {/* ============================================================ */}
@@ -530,13 +554,43 @@ export default function Atsc3EndToEndGaps() {
                     between an operator's "broadcast this" and the RF exciter, grouped by
                     layer, with the recommended build order at the bottom.
                 </Text>
+                <Text tone="secondary" size="small">
+                    Closing every row is multi-year work (milestones M7–M12): packaging,
+                    signaling, transport, production A/324 STLTP, etc. The table tracks status
+                    incrementally as the repo grows—expect small deltas per change, not a
+                    single leap to RF.
+                </Text>
+                <Text tone="secondary" size="small">
+                    Driving every inventory row to DONE would mean implementing the entire
+                    NextGen TV chain (and the exciter PHY) in one codebase; that is not the
+                    goal of atsc3_proto. EXTERNAL rows stay with the transmitter vendor; many
+                    MISSING rows are industry-sized programs. Use M7–M12 as the staged roadmap
+                    for what may land here.
+                </Text>
             </Stack>
 
             <Grid columns={4} gap={16}>
-                <Stat value={doneGaps} label="Done in atsc3_proto" tone="success" />
-                <Stat value={inScopeMissing} label="Missing (in scope)" tone="warning" />
+                <Stat value={doneGaps} label="Gap rows DONE" tone="success" />
+                <Stat value={inScopeMissing} label="PARTIAL + MISSING (in scope)" tone="warning" />
                 <Stat value={externalGaps} label="Out of scope (exciter / RF)" tone="info" />
-                <Stat value={`${pctDone}%`} label="In-scope coverage" />
+                <Stat value={`${pctDone}%`} label="DONE ÷ in-scope rows" tone="info" />
+            </Grid>
+
+            <Stack gap={8}>
+                <Text weight="semibold" size="small">
+                    Declared in-repo roadmap (A/330 lab link layer only)
+                </Text>
+                <Text tone="secondary" size="small">
+                    Rows with <Text as="span" weight="semibold">roadmap: true</Text> in the table
+                    source are the subset this repository explicitly tracks for “all link-layer
+                    lab gaps closed”; they are independent of the full operator→RF inventory above.
+                </Text>
+            </Stack>
+            <Grid columns={4} gap={16}>
+                <Stat value={roadmapTotal} label="Roadmap rows" tone="info" />
+                <Stat value={roadmapDone} label="Roadmap DONE" tone="success" />
+                <Stat value={roadmapOpen} label="Roadmap open" tone={roadmapOpen === 0 ? "success" : "warning"} />
+                <Stat value={`${pctRoadmap}%`} label="DONE ÷ roadmap rows" tone="success" />
             </Grid>
 
             <Divider />
@@ -553,6 +607,7 @@ export default function Atsc3EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics",
                         ]}
                     />
                     <BulletGroup
@@ -560,7 +615,7 @@ export default function Atsc3EndToEndGaps() {
                         items={[
                             "ALP packet: 16-bit base header + opaque payload (≤ 2047 B)",
                             "TLV-mux packet: 24-bit header + ALP payload (≤ 65 535 B)",
-                            "Sinks: stdout://, file:///path, null:// (throughput soak)",
+                            "Sinks: stdout://, file:///path, null://, udp://host:port (TLV-mux/UDP), ipv4udp-file://…?src=&dst=&… (M8 wire append), stltp://host:port (lab STLTP/UDP), lls://[host:port][?table=&group=&gcm1=] (A/331 LLS + gzip; default 224.0.23.60:4937)",
                         ]}
                     />
                     <BulletGroup
@@ -569,6 +624,8 @@ export default function Atsc3EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc",
+                            "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
                     <BulletGroup
@@ -577,6 +634,14 @@ export default function Atsc3EndToEndGaps() {
                             "Per-protocol fixture round-trip tests (auto-generated)",
                             "tools/smoke/codec_smoke.py — pure-Python golden checks (25 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
+                            "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
+                            "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",
+                            "scripts/stltp_integration_test.sh — stltp:// lab UDP strip + verify",
+                            "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
+                            "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
+                            "scripts/run_all_integration.sh — all sink/LLS/STLTP legs + RTCM 12×96",
+                            "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
+                            ".github/workflows/ci.yml — same seven legs in Docker (RTCM 12×96); skips webapp/docs/pages-only diffs; workflow_dispatch",
                         ]}
                     />
                 </Grid>
@@ -762,22 +827,43 @@ export default function Atsc3EndToEndGaps() {
                         <CardBody>
                             <Stack gap={8}>
                                 <Text>
-                                    Skip the full REST API. Add a single
-                                    {' '}<Text as="span" weight="semibold">
+                                    <Text as="span" weight="semibold">
                                         POST /ingest
-                                    </Text>{' '}
-                                    HTTP endpoint inside the existing Seastar gateway
-                                    (use seastar/http) that accepts a JSON envelope:
+                                    </Text>
+                                    ,{" "}
+                                    <Text as="span" weight="semibold">
+                                        GET /config
+                                    </Text>{" "}
+                                    (JSON ingress + sink_uri),{" "}
+                                    <Text as="span" weight="semibold">
+                                        GET /services
+                                    </Text>
+                                    {" / "}
+                                    <Text as="span" weight="semibold">
+                                        POST /services
+                                    </Text>
+                                    ,{" "}
+                                    <Text as="span" weight="semibold">
+                                        DELETE /services?id=
+                                    </Text>{" "}
+                                    (in-memory service registry), and health/metrics routes are
+                                    available when you pass{" "}
+                                    <Text as="span" weight="semibold">
+                                        --admin-http host:port
+                                    </Text>{" "}
+                                    to the gateway (Seastar HTTP). Ingest JSON envelope:
                                 </Text>
                                 <Text size="small">
                                     {`{ "service_id": 1, "type": "rtcm" | "raw" | "lls", "payload_b64": "..." }`}
                                 </Text>
                                 <Text>
-                                    The gateway routes by `type` into the existing
-                                    encoder pipeline, plus a new
-                                    {' '}<Text as="span" weight="semibold">lls://</Text>{' '}
-                                    sink that emits LLS-framed XML on a configurable
-                                    multicast IP. Two days of work.
+                                    With{" "}
+                                    <Text as="span" weight="semibold">
+                                        --sink lls://…
+                                    </Text>
+                                    , cleartext or pre-gzipped LLS is framed per A/331 (Table 6.1 +
+                                    gzip) on UDP and skips ALP/TLV; otherwise the same encoder as
+                                    TCP ingress applies (`type` is validated only for now).
                                 </Text>
                             </Stack>
                         </CardBody>
@@ -787,13 +873,13 @@ export default function Atsc3EndToEndGaps() {
                         <CardBody>
                             <Stack gap={8}>
                                 <Text>
-                                    Add a third sink:
-                                    {' '}<Text as="span" weight="semibold">
-                                        stltp://exciter:30000
-                                    </Text>{' '}
-                                    that wraps each TLV-mux frame in a minimal A/324
-                                    STLTP packet (BBP for one PLP, hard-coded L1B/L1D,
-                                    monotonic-counter timestamps, no PTP).
+                                    Implemented sink:{" "}
+                                    <Text as="span" weight="semibold">
+                                        stltp://host:port
+                                    </Text>{" "}
+                                    wraps each TLV-mux frame in a minimal lab STLTP-style UDP
+                                    packet (BBP stub, hard-coded L1B/L1D, monotonic timestamps, no
+                                    PTP). Not full M10 conformance, but useful on the bench.
                                 </Text>
                                 <Text>
                                     Doesn't pass conformance, but a real exciter on the

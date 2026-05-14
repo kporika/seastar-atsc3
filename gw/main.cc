@@ -6,6 +6,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 
 #include <boost/program_options.hpp>
@@ -15,9 +16,12 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/http/httpd.hh>
+#include <seastar/net/socket_defs.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
 
+#include "admin_http.h"
 #include "atsc3_gw.h"
 
 namespace bpo = boost::program_options;
@@ -32,14 +36,31 @@ int main(int argc, char** argv) {
          "ingress TCP bind address (host:port)")
         ("sink",
          bpo::value<std::string>()->default_value("stdout://"),
-         "output sink URI (file:///path, stdout://)");
+         "output sink URI (file:///…, stdout://, null://, udp://host:port, "
+         "stltp://host:port, lls://[host:port][?table=&group=&gcm1=], "
+         "ipv4udp-file:///path?src=&dst=&srcport=&dstport=[&ttl=])")
+        ("admin-http",
+         bpo::value<std::string>()->default_value(""),
+         "optional HTTP admin bind host:port: / /healthz /readyz /metrics /config PATCH+PUT /config POST /config/sink /services "
+         "POST /ingest /services DELETE /services?id= "
+         "(empty disables)")
+        ("services-state-file",
+         bpo::value<std::string>()->default_value(""),
+         "optional JSON file for /services registry (shard 0); load at start, save on POST/DELETE "
+         "(empty disables)");
 
     return app.run(argc, argv, [&app]() -> seastar::future<int> {
         auto& cfg = app.configuration();
 
+        const std::string admin_bind = cfg["admin-http"].as<std::string>();
+        const std::string services_state = cfg["services-state-file"].as<std::string>();
+
         atsc3::gw::gw_config gcfg{
             .ingress_addr = seastar::ipv4_addr(cfg["ingress"].as<std::string>()),
             .sink_uri     = cfg["sink"].as<std::string>(),
+            .services_state_file =
+                services_state.empty() ? std::nullopt
+                                       : std::make_optional(services_state),
         };
 
         auto server = std::make_unique<seastar::sharded<atsc3::gw::gw_server>>();
@@ -47,9 +68,22 @@ int main(int argc, char** argv) {
         co_await server->start(gcfg);
         co_await server->invoke_on_all(&atsc3::gw::gw_server::start);
 
+        std::optional<seastar::httpd::http_server_control> admin_ctl;
+        if (!admin_bind.empty()) {
+            admin_ctl.emplace();
+            co_await admin_ctl->start("atsc3-admin");
+            seastar::ipv4_addr aa(admin_bind);
+            co_await atsc3::gw::admin_http_listen(*admin_ctl, *server,
+                                                  seastar::socket_address(aa));
+        }
+
         mlog.info(
-            "atsc3_gw ready: ingress={} sink={} smp={}",
-            gcfg.ingress_addr, gcfg.sink_uri, seastar::smp::count);
+            "atsc3_gw ready: ingress={} sink={} admin_http={} services_state={} smp={}",
+            gcfg.ingress_addr, gcfg.sink_uri,
+            admin_bind.empty() ? std::string("(disabled)") : admin_bind,
+            gcfg.services_state_file.has_value() ? *gcfg.services_state_file
+                                                 : std::string("(none)"),
+            seastar::smp::count);
 
         // Wait for SIGINT/SIGTERM. The promise is satisfied from the signal
         // handler; the future blocks the coro until then.
@@ -61,6 +95,10 @@ int main(int argc, char** argv) {
             try { stopped.set_value(); } catch (...) {}
         });
         co_await stopped.get_future();
+
+        if (admin_ctl) {
+            co_await admin_ctl->stop();
+        }
 
         // Aggregate stats across shards before tearing down for a final log.
         atsc3::gw::gw_server::stats_t total{};

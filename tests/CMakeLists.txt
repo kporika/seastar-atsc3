@@ -26,6 +26,11 @@ else()
 endif()
 
 # 2) hand-written tests
+add_executable(udp_ipv4_test udp_ipv4_test.cc)
+target_include_directories(udp_ipv4_test PRIVATE ${CMAKE_SOURCE_DIR}/lib)
+target_link_libraries(udp_ipv4_test PRIVATE atsc3_proto)
+add_test(NAME udp_ipv4_test COMMAND udp_ipv4_test)
+
 add_executable(encoder_pipeline_test
     encoder_pipeline_test.cc
     ${CMAKE_SOURCE_DIR}/gw/encoder_pipeline.cc)

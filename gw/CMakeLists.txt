@@ -3,6 +3,7 @@
 set(GW_SOURCES
     main.cc
     atsc3_gw.cc atsc3_gw.h
+    admin_http.cc admin_http.h
     ingress_tcp.cc ingress_tcp.h
     sink.cc sink.h
     length_framer.cc length_framer.h
@@ -13,6 +14,8 @@ add_executable(atsc3_gw ${GW_SOURCES})
 
 target_include_directories(atsc3_gw PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
+find_package(ZLIB REQUIRED)
+
 # Seastar::seastar is the canonical imported target from SeastarConfig.cmake.
 # It transitively pulls in the full set of compile flags (-DSEASTAR_API_LEVEL,
 # -DSEASTAR_SSTRING, ...) and link dependencies (boost, hwloc, lz4, c-ares,
@@ -20,5 +23,6 @@ target_include_directories(atsc3_gw PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(atsc3_gw PRIVATE
     atsc3_proto
     Seastar::seastar
+    ZLIB::ZLIB
     boost_program_options
     pthread)

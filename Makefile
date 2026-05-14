@@ -5,12 +5,26 @@
 #   make build              # codegen + cmake + ninja
 #   make smoke              # pure-python correctness check (no C++ build)
 #   make integ              # end-to-end gw + mmt_probe loopback
+#   make integ-udp          # udp:// sink
+#   make integ-ipv4udp      # ipv4udp-file:// + m8 strip + verify
+#   make integ-admin        # PATCH /config sink_uri hot-swap (needs python3)
+#   make integ-all          # all host integ scripts (RTCM 12×96)
+#   make integ-stltp       # stltp:// lab UDP + strip + verify
+#   make integ-lls         # lls:// Table 6.1 + gzip UDP + Python validate
 #
 # Quick start (zero local deps; everything runs in Docker):
 #   make deps               # build the atsc3-deps image (Seastar + tooling)
 #   make image              # build atsc3-proto from source via Dockerfile.app
 #                           # (runs ctest + python smoke during build)
 #   make run                # docker run atsc3-proto with default args
+#   make image-integ        # file-sink integration loopback in the image
+#   make image-integ-ipv4udp   # M8 file sink in the image
+#   make image-integ-udp    # udp:// in the image
+#   make image-integ-admin  # PATCH /config in the image (needs python3)
+#   make image-integ-all    # full suite in the image (incl. RTCM 12×96)
+#   make image-integ-rtcm   # RTCM path only (12×96) in the image
+#   make image-integ-stltp     # STLTP lab UDP integration in the image
+#   make image-integ-lls       # LLS UDP integration in the image
 #   make image-shell        # interactive shell inside the runtime image
 
 PYTHON         ?= python3
@@ -28,8 +42,8 @@ APP_DOCKERFILE  := Dockerfile.app
 # the next `make image`.
 DEPS_STAMP     := .make/deps.stamp
 
-.PHONY: default build codegen clean lint smoke integ \
-        deps image image-fast image-integ run image-shell deps-shell
+.PHONY: default build codegen clean lint smoke integ integ-udp integ-ipv4udp integ-stltp integ-lls integ-rtcm integ-admin integ-all \
+        deps image image-fast image-integ image-integ-udp image-integ-ipv4udp image-integ-stltp image-integ-lls image-integ-rtcm image-integ-admin image-integ-all run image-shell deps-shell
 
 default: build
 
@@ -54,6 +68,34 @@ smoke:
 # prior `make build`.
 integ:
 	./scripts/integration_test.sh
+
+# Same payloads as integ, but gw --sink udp://127.0.0.1:R (Python collects UDP).
+integ-udp:
+	./scripts/udp_integration_test.sh
+
+# Same as integ-udp, but --sink ipv4udp-file://… then m8_bin_to_pcap --extract-tlvmux.
+integ-ipv4udp:
+	./scripts/ipv4udp_file_integration_test.sh
+
+# Lab STLTP UDP wrap (gw/sink.cc) → strip fixed prefix → verify TLV-mux.
+integ-stltp:
+	./scripts/stltp_integration_test.sh
+
+# lls:// sink: cleartext XML → Table 6.1 + gzip UDP (Python validates one datagram).
+integ-lls:
+	./scripts/lls_integration_test.sh
+
+# RTCM file → gw → TLV-mux → verify --validate-rtcm (default 32×128; override via script args).
+integ-rtcm:
+	./scripts/rtcm_integration_test.sh
+
+# HTTP admin POST /config/sink (sink_uri ↔ null://); needs python3.
+integ-admin:
+	./scripts/admin_patch_config_integration_test.sh
+
+# All integration scripts in one shot (RTCM uses 12×96 for speed).
+integ-all:
+	./scripts/run_all_integration.sh
 
 clean:
 	rm -rf build .make
@@ -88,7 +130,35 @@ image-fast: $(DEPS_STAMP)
 image-integ: image
 	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/integration_test.sh $(APP_IMAGE)
 
-# Run the runtime image with its default ENTRYPOINT (atsc3_gw → stdout sink).
+image-integ-udp: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/udp_integration_test.sh $(APP_IMAGE)
+
+image-integ-ipv4udp: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/ipv4udp_file_integration_test.sh $(APP_IMAGE)
+
+image-integ-stltp: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/stltp_integration_test.sh $(APP_IMAGE)
+
+image-integ-lls: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/lls_integration_test.sh $(APP_IMAGE)
+
+image-integ-rtcm: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/rtcm_integration_test.sh $(APP_IMAGE) "" 12 96
+
+image-integ-admin: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/admin_patch_config_integration_test.sh $(APP_IMAGE)
+
+# Full integration suite (same order as CI; RTCM uses 12×96).
+image-integ-all: image
+	set -e; \
+	for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh; do \
+		echo ">>> $$s"; \
+		$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/$$s $(APP_IMAGE); \
+	done; \
+	echo ">>> rtcm_integration_test.sh"; \
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/rtcm_integration_test.sh $(APP_IMAGE) "" 12 96; \
+	echo ">>> image-integ-all: PASS"
+
 # Override args via RUN_ARGS, e.g.:
 #   make run RUN_ARGS="--smp 4 --sink file:///tmp/out --ingress 0.0.0.0:9000"
 RUN_ARGS ?=

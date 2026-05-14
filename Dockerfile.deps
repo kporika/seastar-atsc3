@@ -62,6 +62,7 @@ RUN apt-get -y update && apt-get -y install \
         libc-ares-dev \
         libunwind-dev \
         liblz4-dev \
+        zlib1g-dev \
         libprotobuf-dev \
         protobuf-compiler \
         xfsprogs \

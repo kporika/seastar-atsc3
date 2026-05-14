@@ -44,12 +44,16 @@ atsc3_proto/
 │   ├── codegen_templates/     # types.h, decoder.{h,cc}, encoder.{h,cc},
 │   │                          # tojson.{h,cc}, fromjson.{h,cc}, fixtures_test.cc
 │   ├── lint_protomap.py       # schema validator
+│   ├── m9_lls_pack.py         # M9 lab: XML → A/331 Table 6.1 + gzip (stdout binary)
+│   ├── m8_bin_to_pcap.py      # M8 lab: IPv4 chain → pcap (DLT_IPV4) or --extract-tlvmux for verify
 │   ├── requirements.txt       # PyYAML, Jinja2
 │   └── smoke/codec_smoke.py   # python mirror of decode/encode + pipeline check
 ├── lib/                       # codec library
 │   ├── runtime/
 │   │   ├── bit_reader.h       # MSB-first bit reader used by generated decoders
-│   │   └── bit_writer.h       # MSB-first bit writer used by generated encoders
+│   │   ├── bit_writer.h       # MSB-first bit writer used by generated encoders
+│   │   ├── ipv4_udp.{hh,cc}   # M8: IPv4 + UDP encapsulation + checksums
+│   │   └── lls_table6_1.hh    # M9: A/331 Table 6.1 LLS 4-byte prefix helper
 │   └── generated/             # codegen output (regenerated each build)
 │       ├── <p>_types.h        # enums + <enum>_name + <enum>_from_name
 │       ├── <p>_decoder.{cc,h} # raw bytes  -> decoded_t
@@ -59,6 +63,7 @@ atsc3_proto/
 │       └── <p>_fixtures_test.cc
 ├── gw/                        # Seastar gateway service
 │   ├── main.cc
+│   ├── admin_http.{cc,h}      # optional --admin-http: / /healthz /readyz /metrics /config PATCH /config /services POST /ingest /services DELETE /services?id=
 │   ├── atsc3_gw.{cc,h}        # sharded server, wires ingress → encoder → sink
 │   ├── ingress_tcp.{cc,h}     # SO_REUSEPORT TCP listener, per-conn framer
 │   ├── length_framer.{cc,h}   # 4-byte BE length-prefix stream framer
@@ -70,17 +75,26 @@ atsc3_proto/
 │   └── CMakeLists.txt
 ├── tests/
 │   ├── CMakeLists.txt         # generated fixture tests + hand-written tests
-│   └── encoder_pipeline_test.cc
+│   ├── encoder_pipeline_test.cc
+│   └── udp_ipv4_test.cc       # M8 IPv4+UDP header + checksum unit test
 ├── scripts/
 │   ├── integration_test.sh    # spawn gw + mmt_probe hex send/verify loopback
+│   ├── udp_integration_test.sh # same via udp:// sink + _udp_recv_concat.py
+│   ├── ipv4udp_file_integration_test.sh  # ipv4udp-file:// + m8 strip + verify
+│   ├── stltp_integration_test.sh  # stltp:// lab UDP + _stltp_lab_udp_to_tlvmux.py + verify
+│   ├── lls_integration_test.sh    # lls:// + _lls_lab_integ_recv.py (Table 6.1 + gzip)
+│   ├── admin_patch_config_integration_test.sh  # POST /config/sink hot-swap (python3 http.client)
 │   ├── rtcm_integration_test.sh   # rtcm-gen → gw → send → verify --validate-rtcm
 │   └── throughput_soak.sh     # null:// sink + duration-bounded burst
+├── fixtures/lls/              # M9 lab: minimal_slt.xml (SLT stub XML)
 ├── docs/                      # architecture notes + gap analyses
 │   ├── END_TO_END_GAPS.md     #   full inventory: input API → RF exciter
 │   └── end_to_end_gaps.canvas.tsx  # Cursor-canvas rendering of the same
 ├── webapp/                    # SPA mirror of the gap-analysis canvas
 │   └── src/                   #   built + deployed to GitHub Pages
-├── .github/workflows/pages.yml # Pages CI: build webapp/, publish on push
+├── .github/workflows/
+│   ├── ci.yml                 # Docker build + ctest + seven legs; main push/PR (not webapp/docs-only) + manual
+│   └── pages.yml              # Pages: build webapp/, publish on push
 ├── seastar/                   # git submodule, pinned to seastar-25.05.0
 ├── Dockerfile.deps            # base image: Seastar + transitive build deps
 ├── Dockerfile.app             # builder + slim runtime image (atsc3-proto)
@@ -104,6 +118,7 @@ make image             # 2) build atsc3-proto (codegen + cmake + ninja
                        #    + ctest + python smoke, then a runtime layer
                        #    carrying just the binaries + protocol YAMLs)
 make image-integ       # 3) end-to-end loopback inside the runtime image
+make image-integ-all   #    full integration suite (all sinks + RTCM 12×96)
 make image-shell       # interactive bash in the runtime image
 make run RUN_ARGS="--smp 4 --sink stdout://"
                        # docker run atsc3-proto, args via RUN_ARGS
@@ -112,6 +127,13 @@ make run RUN_ARGS="--smp 4 --sink stdout://"
 `make image` auto-rebuilds `atsc3-deps` whenever `Dockerfile.deps` changes
 (tracked via `.make/deps.stamp`), so once you've run `make deps` you can
 mostly forget about it.
+
+On GitHub, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) builds
+both images with tests enabled and runs the same integration sequence as
+`make image-integ-all` (seven shell legs before RTCM, then RTCM at 12×96). It runs on pushes and PRs
+to `main` unless the diff only touches `webapp/`, `docs/`, or
+[`pages.yml`](./.github/workflows/pages.yml); use **workflow_dispatch** in
+the Actions tab for a manual run.
 
 For fast iteration that *skips* the in-image ctest + smoke step:
 
@@ -138,6 +160,13 @@ git submodule update --init --recursive   # populates ./seastar/ (optional)
 make build                                # codegen + cmake + ninja → ./build
 ctest --test-dir build --output-on-failure
 make integ                                # end-to-end loopback against ./build
+make integ-udp                             # same via udp:// sink (needs python3)
+make integ-ipv4udp                         # ipv4udp-file:// + m8 strip + verify (needs python3)
+make integ-stltp                           # stltp:// lab UDP strip + verify (needs python3)
+make integ-lls                             # lls:// Table 6.1 + gzip validate (needs python3)
+make integ-admin                           # PATCH /config sink hot-swap (needs python3)
+make integ-rtcm                            # RTCM path (default 32×128 in script; pass frames/bytes as extra args)
+make integ-all                             # all integration scripts (RTCM 12×96)
 ```
 
 Optional env vars: `BUILD_TYPE=RelWithDebInfo`, `MAKE_JOBS=8`.
@@ -162,15 +191,25 @@ python3 -m pip install -r tools/requirements.txt
 # Debian/Ubuntu:  apt-get install python3-yaml python3-jinja2
 ```
 
+## M8 / M9 lab helpers
+
+- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). No ROUTE/LCT/MMTP yet.
+- **M9:** `lib/runtime/lls_table6_1.hh` matches the **A/331 Table 6.1** four-byte prefix used by `lls://`. **`tools/m9_lls_pack.py`** reads cleartext XML (e.g. `fixtures/lls/minimal_slt.xml`) and writes **prefix + gzip** to stdout for piping into `lls://` or `POST /ingest` (base64-wrap as needed).
+
+```bash
+python3 tools/m9_lls_pack.py --table 1 fixtures/lls/minimal_slt.xml | xxd | head
+python3 tools/m8_bin_to_pcap.py --self-test
+# after capturing ipv4udp-file://… output:
+# python3 tools/m8_bin_to_pcap.py -i /tmp/ip.bin.shard0 -o /tmp/out.pcap
+# python3 tools/m8_bin_to_pcap.py -i /tmp/ip.bin.shard0 --extract-tlvmux /tmp/tlv.bin
+```
+
 ## Run tests
 
 ```bash
 cd build
 ctest --output-on-failure
-# expected:
-#   Test #1: alp_fixtures_test ........ Passed
-#   Test #2: tlv_mux_fixtures_test .... Passed
-#   Test #3: encoder_pipeline_test .... Passed
+# includes udp_ipv4_test (M8) + encoder_pipeline_test + generated *_fixtures_test
 ```
 
 The python smoke can be run without a C++ build (useful when iterating on
@@ -195,6 +234,49 @@ and writes the TLV-mux bytes to the sink.
 
 # Multi-shard
 ./build/gw/atsc3_gw --smp 4 --ingress 0.0.0.0:9000 --sink file:///tmp/gw.out
+```
+
+### HTTP admin (control-plane stub)
+
+When you pass **`--admin-http host:port`**, the gateway also exposes:
+
+Optional **`--services-state-file /path/to/services.json`** (with or without admin HTTP): on **shard 0** the file is loaded at startup (if present) and rewritten after each successful **`POST /services`** or **`DELETE /services`**. JSON shape: `{"version":1,"next_id":N,"services":[{"id":1,"name":"…"},…]}`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/` | JSON index listing admin paths (discovery) |
+| GET | `/healthz` | Process liveness (`200` + `ok`) |
+| GET | `/readyz` | All shards have sink + ingress up (`200` or `503`) |
+| GET | `/config` | Read-only JSON: `ingress`, `sink_uri`, and `services_state_file` (`null` or path string) |
+| POST | `/config/sink` | Body must be only `{"sink_uri":"…"}` — hot-swaps the sink on every shard (sequential; rolls back prior shards if a later shard rejects the URI). **Preferred** for scripts; returns the same JSON as `GET /config` after the swap. |
+| PATCH or PUT | `/config` | Same JSON as `POST /config/sink`. |
+| GET | `/services` | JSON `{"services":[{"id", "name"},…]}` — registry on shard 0; persisted when `--services-state-file` is set |
+| GET | `/metrics` | Prometheus-style text counters (aggregate over shards) |
+| DELETE | `/services?id=<uint>` | Remove a service by id (`200` + `{"ok":true,"id":…}`; unknown id → `404`; bad/missing `id` → `400`) |
+| POST | `/ingest` | JSON `{"service_id"?: uint, "type":"raw"\|"rtcm"\|"lls", "payload_b64":"..."}` — if `service_id` is present it must exist in **`GET /services`**; same encode/sink rules as TCP ingress |
+| POST | `/services` | JSON `{"name":"…"}` → `201` + `{"id","name"}`; duplicate name → `409`; updates state file when configured |
+
+`POST /ingest` forwards decoded bytes to **shard 0** so file sinks stay deterministic in demos. Omit **`service_id`** for the legacy path; if set, it must match an id from **`GET /services`** (after **`POST /services`**).
+
+Example:
+
+```bash
+./build/gw/atsc3_gw --smp 1 --ingress 127.0.0.1:9000 --sink stdout:// \
+    --services-state-file /tmp/atsc3_services.json \
+    --admin-http 127.0.0.1:8080 &
+curl -sSf http://127.0.0.1:8080/
+curl -sSf http://127.0.0.1:8080/healthz
+curl -sSf http://127.0.0.1:8080/config
+curl -sSf -X POST http://127.0.0.1:8080/config/sink \
+  -H 'Content-Type: application/json' -d '{"sink_uri":"null://"}'
+curl -sSf http://127.0.0.1:8080/services
+curl -sSf -X POST http://127.0.0.1:8080/services \
+  -H 'Content-Type: application/json' -d '{"name":"demo"}'
+curl -sSf -X DELETE 'http://127.0.0.1:8080/services?id=1'
+# payload "hi" -> base64 aGk=
+curl -sSf -X POST http://127.0.0.1:8080/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"raw","payload_b64":"aGk="}'
 ```
 
 ### End-to-end loopback with mmt_probe

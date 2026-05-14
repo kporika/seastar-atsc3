@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build atsc3-deps + atsc3-proto in Docker (ctest + codec smoke during app
+# build), then run all shell integration scripts against the runtime image.
+#
+# Skips when a push/PR only touches webapp/, docs/, or the Pages workflow so
+# doc/SPA-only edits do not burn a full Docker build.
+
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'webapp/**'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'webapp/**'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-build-and-integ:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build atsc3-deps
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.deps
+          tags: atsc3-deps:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build atsc3-proto (ctest + smoke)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.app
+          tags: atsc3-proto:latest
+          load: true
+          build-args: |
+            RUN_TESTS=1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Integration — file / UDP / M8 / STLTP / LLS / admin config + RTCM
+        run: |
+          set -euo pipefail
+          for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh; do
+            echo ">>> $s"
+            docker run --rm --entrypoint "/opt/atsc3_proto/scripts/${s}" atsc3-proto:latest
+          done
+          echo ">>> rtcm_integration_test.sh"
+          docker run --rm --entrypoint /opt/atsc3_proto/scripts/rtcm_integration_test.sh atsc3-proto:latest "" 12 96
