@@ -1,0 +1,52 @@
+# MMTP — **GFD (generic file delivery) payload header** (ISO/IEC 23008-1 MMTP,
+# Figure 6; informative MPEG-MMT draft §4.2.1.5). Applies when **payload_type**
+# in `mmtp_header_word0` is **0x01** (generic object / GFD).
+#
+# **C**, **L**, **B** (1 bit each): end-of-session / end-of-object / last byte
+# of object. **CP** (8b) CodePoint. **RES** (5b) reserved, zero. **TOI** (32b)
+# transport object id. **start_offset** (48b) byte offset in object.
+# Opaque file payload follows this 12-octet header.
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_payload_gfd_header
+  proto_id: 14
+  spec: "ISO/IEC 23008-1 (MMTP GFD-mode payload header)"
+  description: "MMTP GFD payload — C/L/B + CodePoint + RES + TOI + start_offset"
+
+header:
+  total_bits: 96
+  fields:
+    - { name: session_last_packet_flag, bit_offset: 0, bit_width: 1, type: bool }
+    - { name: object_last_packet_flag, bit_offset: 1, bit_width: 1, type: bool }
+    - { name: object_last_byte_flag, bit_offset: 2, bit_width: 1, type: bool }
+    - { name: code_point, bit_offset: 3, bit_width: 8, type: uint }
+    - { name: reserved, bit_offset: 11, bit_width: 5, type: uint }
+    - { name: transport_object_identifier, bit_offset: 16, bit_width: 32, type: uint }
+    - { name: start_offset, bit_offset: 48, bit_width: 48, type: uint }
+
+fixtures:
+  - name: mid_object_chunk
+    description: "C=L=B=0, CP=0x42, RES=0, TOI=0x11223344, start_offset=3 → 08 40 11 22 33 44 00 00 00 00 00 03"
+    raw_hex: "08 40 11 22 33 44 00 00 00 00 00 03"
+    expected:
+      session_last_packet_flag: false
+      object_last_packet_flag: false
+      object_last_byte_flag: false
+      code_point: 66
+      reserved: 0
+      transport_object_identifier: 287454020
+      start_offset: 3
+
+  - name: flags_and_bounds
+    description: "C=L=B=1, CP=0xFF, TOI=all 1s, start_offset=all 1s"
+    raw_hex: "FF E0 FF FF FF FF FF FF FF FF FF FF"
+    expected:
+      session_last_packet_flag: true
+      object_last_packet_flag: true
+      object_last_byte_flag: true
+      code_point: 255
+      reserved: 0
+      transport_object_identifier: 4294967295
+      start_offset: 281474976710655
