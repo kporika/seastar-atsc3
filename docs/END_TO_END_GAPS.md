@@ -86,7 +86,7 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - `scripts/run_all_integration.sh` — runs the sink/LLS/STLTP scripts above plus admin + **M7** + LCT word‑0 + RTCM (**12×96**)
 - `scripts/admin_patch_config_integration_test.sh` — admin **`POST /config/sink`** hot-swaps **`sink_uri`** (`null://` ↔ original) with HTTP checks
 - `scripts/m7_operator_integration_test.sh` — Bearer + **`PATCH /services`**, **`POST /ingest`** with **`service_id`**, **`--services-state-file`** persistence (**`SIGTERM`** before reading **`file://`**.**`shard0`** sinks)
-- `.github/workflows/ci.yml` — same **`make image-integ-all`** Docker sequence (**eight** shell scripts **before** RTCM, then RTCM **12×96**); skips `webapp/` / `docs` / **`pages.yml`**–only diffs; **`workflow_dispatch`**
+- `.github/workflows/ci.yml` — **no Docker**: Python **`tools/lint_protomap.py`**, **`tools/codegen.py`**, **`tools/smoke/codec_smoke.py`**, then **`webapp/`** **`npm ci`** + **`npm run build`** on **`ubuntu-latest`**; **`workflow_dispatch`** on **`push`/`pull_request`** to **`main`**. C++ **`ctest`** and **`scripts/*.sh`** integration legs run locally (**`make build`**, **`make integ*`** or **`make image-integ-*`** when using images).
 
 ---
 
@@ -146,14 +146,14 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
 | A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first word (codegen + fixtures); gw lab adds word‑0 and optional BE32 **TSI** (**S**) and/or BE32 **TOI** (**O**=**1**, `toi_flag`); CCI/ALC sessions, larger **O**/**H**, source/repair, ROUTE binding still missing |
-| A/331 §10          | MMTP packetizer + signaling messages   | MISSING | MMTP header, MFU mode, PA / MPI / MPT messages       |
+| A/331 §10          | MMTP packetizer + signaling messages   | MISSING | **`mmtp_desc`** / **`mmtp_desc_loop`** cover **Annex A.5** descriptor TLVs only. **Next:** ISO/IEC 23008-1 **clause 9** MMTP **packet** header + payload modes (MFU, PA/MPI/MPT bodies), then optional **`gw`** lab prefix similar to **LCT** |
 | RFC 5053 / 6330    | Raptor10 / RaptorQ FEC                 | MISSING | Required for ROUTE robustness over a one-way link    |
 
 ### Network
 
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
-| RFC 768 + RFC 791  | UDP / IPv4 builder + checksums         | PARTIAL | `lib/runtime/ipv4_udp.{hh,cc}` — `encapsulate_ipv4_udp`; **`ipv4udp-file://`** sink appends full datagrams; **`udp://`** lab send (kernel IP/UDP); no ROUTE/LCT/MMTP framing yet |
+| RFC 768 + RFC 791  | UDP / IPv4 builder + checksums         | PARTIAL | `lib/runtime/ipv4_udp.{hh,cc}` — `encapsulate_ipv4_udp`; **`ipv4udp-file://`** sink appends full datagrams; **`udp://`** lab send (kernel IP/UDP); **`lct_rfc5651_word0`** + **`--prepend-lct-word0`** (optional **`--lct-include-tsi`**, **`--lct-include-toi`**) lab prefix inside ALP; full ROUTE/ALC/MMTP wire not in **`gw`** yet |
 
 ### Link (this is the part `atsc3_proto` already owns)
 
@@ -232,7 +232,7 @@ opaque payloads; the gateway can **prefix** the codegen **LCT word‑0** with
 **`--prepend-lct-word0`** (**`--lct-codepoint`**) and optional **`--lct-include-tsi`**
 (and/or **`--lct-include-toi`**) (lab: skips **CCI**; **TSI**/ **TOI** (**O**=**1**) as 32‑bit BE fields in **RFC** order after word‑0, **header_length_words** = **2–3**). Full **CCI**, arbitrary larger
 **S**/**O**/**H** combos, ALC semantics, ROUTE bindings, and **MMTP** remain the
-integration target after richer codecs exist.
+integration target after richer codecs exist. **Next transport slice:** ISO/IEC 23008-1 **clause 9** MMTP packet header as new **`protocol/*.yaml`** (alongside **`mmtp_desc`** for signaling TLVs), then PA/MPI/MPT message payloads and optional **`gw`** stitching.
 
 **Unlocks:** Real IP multicast packets ride through ALP+TLV-mux.
 **Closes:** UDP/IPv4 builder (partial: C++ datagram builder + sinks) · ROUTE/LCT packetizer (partial: LCT header word-0 YAML) · MMTP packetizer · Raptor10/RaptorQ FEC.

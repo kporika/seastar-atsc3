@@ -221,7 +221,8 @@ const GAPS: ReadonlyArray<GapRow> = [
         spec: "A/331 §10",
         component: "MMTP packetizer + signaling msgs",
         status: "missing",
-        notes: "MMTP header, MFU mode, PA / MPI / MPT messages",
+        notes:
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 descriptor TLVs only; next: ISO/IEC 23008-1 clause 9 MMTP packet header + payload modes (MFU, PA/MPI/MPT), then optional gw lab prefix like LCT",
     },
     {
         layer: "Transport",
@@ -419,7 +420,7 @@ const ROADMAP: ReadonlyArray<{
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
             "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab). " +
             "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads.",
+            "ALP encapsulation already accepts opaque payloads. Next: ISO/IEC 23008-1 MMTP packet header (clause 9) as YAML.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
@@ -660,7 +661,7 @@ export default function EndToEndGaps() {
                             "scripts/lct_word0_integration_test.sh — A/B/C/D: word‑0 · TSI · TOI · TSI+TOI + mmt_probe verify --strip-lct-word0 (optional --expect-lct-tsi and/or --expect-lct-toi)",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
                             "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
-                            ".github/workflows/ci.yml — eight Docker scripts + RTCM (12×96) like image-integ-all; skips webapp/docs/pages-only diffs; workflow_dispatch",
+                            ".github/workflows/ci.yml — Python lint + codegen + codec_smoke + webapp npm build (no Docker); C++/integration: make build && make integ* locally; workflow_dispatch",
                         ]}
                     />
                 </Grid>

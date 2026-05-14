@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build atsc3-deps + atsc3-proto in Docker (ctest + codec smoke during app
-# build), then run all shell integration scripts against the runtime image.
+# Lightweight CI: no Docker. C++/Seastar builds and shell integration tests
+# are expected to run on developer machines (see Makefile `make build`,
+# `make integ*`, and optional `make image-integ-*` when using images).
 #
-# Skips when a push/PR only touches webapp/, docs/, or the Pages workflow so
-# doc/SPA-only edits do not burn a full Docker build.
+# This workflow validates protocol YAML (lint + codegen + Python smoke) and
+# ships a clean TypeScript build of the webapp.
 
 name: CI
 
@@ -12,16 +13,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore:
-      - 'webapp/**'
-      - 'docs/**'
-      - '.github/workflows/pages.yml'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'webapp/**'
-      - 'docs/**'
-      - '.github/workflows/pages.yml'
 
 permissions:
   contents: read
@@ -31,44 +24,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker-build-and-integ:
+  lint-smoke-webapp:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build atsc3-deps
-        uses: docker/build-push-action@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          context: .
-          file: Dockerfile.deps
-          tags: atsc3-deps:latest
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          python-version: "3.12"
 
-      - name: Build atsc3-proto (ctest + smoke)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.app
-          tags: atsc3-proto:latest
-          load: true
-          build-args: |
-            RUN_TESTS=1
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Integration — file / UDP / M8 / STLTP / LLS / admin+M7 / LCT-word0 / RTCM
+      - name: Python — protocol lint, codegen, codec smoke
         run: |
           set -euo pipefail
-          for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh m7_operator_integration_test.sh lct_word0_integration_test.sh; do
-            echo ">>> $s"
-            docker run --rm --entrypoint "/opt/atsc3_proto/scripts/${s}" atsc3-proto:latest
-          done
-          echo ">>> rtcm_integration_test.sh"
-          docker run --rm --entrypoint /opt/atsc3_proto/scripts/rtcm_integration_test.sh atsc3-proto:latest "" 12 96
+          python3 -m pip install --upgrade pip
+          pip install pyyaml jinja2
+          python3 tools/lint_protomap.py protocol
+          python3 tools/codegen.py --in protocol --out lib/generated
+          python3 tools/smoke/codec_smoke.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Webapp — install and production build
+        working-directory: webapp
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build

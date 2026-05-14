@@ -98,7 +98,7 @@ atsc3_proto/
 ├── webapp/                    # SPA mirror of the gap-analysis canvas
 │   └── src/                   #   built + deployed to GitHub Pages
 ├── .github/workflows/
-│   ├── ci.yml                 # Docker build + ctest + eight shell scripts before RTCM; main push/PR (not webapp/docs-only) + manual
+│   ├── ci.yml                 # GitHub Actions: Python protocol lint + codegen + codec smoke; webapp build (no Docker)
 │   └── pages.yml              # Pages: build webapp/, publish on push
 ├── seastar/                   # git submodule, pinned to seastar-25.05.0
 ├── Dockerfile.deps            # base image: Seastar + transitive build deps
@@ -155,12 +155,8 @@ mostly forget about it.
 `build-docker`, or absolute), else **`build/`** when **`gw/atsc3_gw`** exists
 there, else **`build-docker/`**, else **`build/`** (error path).
 
-On GitHub, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) builds
-both images with tests enabled and runs the same integration sequence as
-`make image-integ-all` (**eight** shell scripts before RTCM, then RTCM at 12×96). It runs on pushes and PRs
-to `main` unless the diff only touches `webapp/`, `docs/`, or
-[`pages.yml`](./.github/workflows/pages.yml); use **workflow_dispatch** in
-the Actions tab for a manual run.
+On GitHub, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs
+**without Docker**: it installs Python dependencies, runs **`tools/lint_protomap.py`**, regenerates **`lib/generated/`** via **`tools/codegen.py`**, executes **`tools/smoke/codec_smoke.py`**, then **`npm ci`** + **`npm run build`** under **`webapp/`**. Use **`make build`** and **`make integ*`** (or **`make image-integ-*`**) on your machine for the C++ gateway, **`ctest`**, and shell integration scripts.
 
 For fast iteration that *skips* the in-image ctest + smoke step:
 
