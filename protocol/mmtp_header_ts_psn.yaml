@@ -1,0 +1,41 @@
+# MMTP — timestamp + packet_sequence_number (Figure 1, rows 2–3).
+# Normative reference: ISO/IEC 23008-1 (MPEG-MMT) — MMTP packet header.
+#
+# On the wire this block **immediately follows** `mmtp_header_word0` for every
+# packet in this version of the header (before optional `packet_counter` when
+# **packet_counter_flag** is set, then optional header extension when **X** is
+# set). Decoders combine `mmtp_header_word0` + this unit (+ optional counter)
+# using the **C** / **X** flags from word‑0.
+#
+# `timestamp` is 32 bits in **big-endian** order; the spec defines semantics
+# (UTC / NTP short format per MMTP). Here it is modeled as an opaque **uint**
+# for codegen round-trips.
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_header_ts_psn
+  proto_id: 8
+  spec: "ISO/IEC 23008-1 (MMTP packet header)"
+  description: "MMTP header — 32-bit timestamp + 32-bit packet_sequence_number"
+
+header:
+  total_bits: 64
+  fields:
+    - { name: timestamp, bit_offset: 0, bit_width: 32, type: uint }
+    - { name: packet_sequence_number, bit_offset: 32, bit_width: 32, type: uint }
+
+fixtures:
+  - name: zero_ts_zero_psn
+    description: "timestamp=0, packet_sequence_number=0"
+    raw_hex: "00 00 00 00 00 00 00 00"
+    expected:
+      timestamp: 0
+      packet_sequence_number: 0
+
+  - name: ntpish_psn1
+    description: "timestamp=0xE8031249, packet_sequence_number=1 (BE)"
+    raw_hex: "E8 03 12 49 00 00 00 01"
+    expected:
+      timestamp: 3892515401
+      packet_sequence_number: 1

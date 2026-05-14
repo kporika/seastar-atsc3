@@ -38,7 +38,9 @@ atsc3_proto/
 │   ├── tlv_mux.yaml           #   ATSC A/330 Annex A — TLV multiplex packet
 │   ├── tlv_mux_frame.yaml     #   wrapper: N tlv_mux packets (M6 example)
 │   ├── lct_rfc5651_word0.yaml #   RFC 5651 §5.1 — LCT header first 32 bits (M8 slice)
-│   ├── mmtp_header_word0.yaml #   ISO/IEC 23008-1 — MMTP packet header first 32 bits (M8 slice)
+│   ├── mmtp_header_word0.yaml #   ISO/IEC 23008-1 — MMTP packet header word 0 (M8)
+│   ├── mmtp_header_ts_psn.yaml #  MMTP timestamp + packet_sequence_number (M8)
+│   ├── mmtp_header_counter32.yaml # MMTP optional packet_counter when C=1 (M8)
 │   ├── mmtp_desc.yaml         #   ATSC A/331 Annex A.5 — MMTP descriptor
 │   └── mmtp_desc_loop.yaml    #   length-prefixed loop of mmtp_desc (M6 example)
 ├── tools/
@@ -218,7 +220,7 @@ python3 -m pip install -r tools/requirements.txt
 
 ## M8 / M9 lab helpers
 
-- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is RFC 5651 LCT header **word‑0** in codegen; **`atsc3_gw`** **`--prepend-lct-word0 [--lct-codepoint N]`** accepts optional **`--lct-include-tsi --lct-tsi`** and/or **`--lct-include-toi --lct-toi`** (RFC order **TSI** then **TOI** when both; **`header_length_words`** **3** for the combo — max **2035** / **2039** / **2043** user octets by prefix size). **`mmt_probe verify`** **`--strip-lct-word0`** with **`--expect-lct-codepoint`** and optional **`--expect-lct-tsi`** / **`--expect-lct-toi`**, strips the lab header for asserts. Scripts: `./scripts/lct_word0_integration_test.sh` (**A–D** phases), **`make integ-lct-word0`**. **`protocol/mmtp_header_word0.yaml`** — ISO/IEC 23008-1 MMTP packet header **word‑0** (codegen + fixtures; timestamp / **packet_sequence_number** / optional **packet_counter** / payload modes not modeled yet). ROUTE sessions / FEC / full MMTP on **`gw`** remain future work.
+- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is RFC 5651 LCT header **word‑0** in codegen; **`atsc3_gw`** **`--prepend-lct-word0 [--lct-codepoint N]`** accepts optional **`--lct-include-tsi --lct-tsi`** and/or **`--lct-include-toi --lct-toi`** (RFC order **TSI** then **TOI** when both; **`header_length_words`** **3** for the combo — max **2035** / **2039** / **2043** user octets by prefix size). **`mmt_probe verify`** **`--strip-lct-word0`** with **`--expect-lct-codepoint`** and optional **`--expect-lct-tsi`** / **`--expect-lct-toi`**, strips the lab header for asserts. Scripts: `./scripts/lct_word0_integration_test.sh` (**A–D** phases), **`make integ-lct-word0`**. **MMTP (ISO/IEC 23008-1) header slices in codegen:** **`mmtp_header_word0.yaml`**, **`mmtp_header_ts_psn.yaml`**, **`mmtp_header_counter32.yaml`** (counter only when **C**=**1** on word‑0). Header extension (**X**), MFU / PA / MPI / MPT payloads, and **`gw`** MMTP prefix remain future work. ROUTE sessions / FEC remain future work.
 - **M9:** `lib/runtime/lls_table6_1.hh` matches the **A/331 Table 6.1** four-byte prefix used by `lls://`. **`tools/m9_lls_pack.py`** reads cleartext XML (e.g. `fixtures/lls/minimal_slt.xml`) and writes **prefix + gzip** to stdout for piping into `lls://` or `POST /ingest` (base64-wrap as needed).
 
 ```bash

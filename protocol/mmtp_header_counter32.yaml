@@ -1,0 +1,32 @@
+# MMTP — 32-bit packet_counter (Figure 1, row 4).
+# Normative reference: ISO/IEC 23008-1 (MPEG-MMT) — MMTP packet header.
+#
+# Present **only** when **packet_counter_flag** (**C**) in `mmtp_header_word0`
+# is **1**. On the wire it **immediately follows** `mmtp_header_ts_psn`
+# (timestamp + packet_sequence_number). If **C**=**0**, omit these four octets.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmtp_header_counter32
+  proto_id: 9
+  spec: "ISO/IEC 23008-1 (MMTP packet header)"
+  description: "MMTP header — optional 32-bit packet_counter (when C=1)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: packet_counter, bit_offset: 0, bit_width: 32, type: uint }
+
+fixtures:
+  - name: counter_zero
+    description: "packet_counter=0"
+    raw_hex: "00 00 00 00"
+    expected:
+      packet_counter: 0
+
+  - name: counter_deadbeef
+    description: "packet_counter=0xDEADBEEF"
+    raw_hex: "DE AD BE EF"
+    expected:
+      packet_counter: 3735928559
