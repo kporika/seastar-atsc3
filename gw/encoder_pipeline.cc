@@ -34,7 +34,8 @@ encoder_pipeline::result encoder_pipeline::encode(
     std::span<const std::byte> alp_body = payload;
     if (_cfg.prepend_rfc5651_lct_word0) {
         const auto& w = _cfg.lct_word0;
-        enum class lab_prefix_mode { none, tsi_word32, toi_o1_word32 };
+        enum class lab_prefix_mode { none, tsi_word32, toi_o1_word32,
+                                    tsi_then_toi_o1_word64 };
 
         lab_prefix_mode mode;
         if (!w.tsi_flag && w.toi_flag == 0) {
@@ -45,6 +46,9 @@ encoder_pipeline::result encoder_pipeline::encode(
                 return r;
             }
             mode = lab_prefix_mode::none;
+        } else if (w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
+                   w.header_length_words == 3) {
+            mode = lab_prefix_mode::tsi_then_toi_o1_word64;
         } else if (w.tsi_flag && w.toi_flag == 0 && !w.half_word_flag &&
                    w.header_length_words == 2) {
             mode = lab_prefix_mode::tsi_word32;
@@ -54,7 +58,8 @@ encoder_pipeline::result encoder_pipeline::encode(
         } else {
             r.error =
                 "encoder_pipeline: unsupported LCT lab prefix (supports word‑0; "
-                "word‑0+32b TSI; word‑0+32b TOI with O==1)";
+                "word‑0+32b TSI; word‑0+32b TOI with O==1; "
+                "word‑0+32b TSI+32b TOI with O==1, header_length_words==3)";
             return r;
         }
 
@@ -65,12 +70,19 @@ encoder_pipeline::result encoder_pipeline::encode(
         }
 
         const std::size_t extra =
-            (mode == lab_prefix_mode::none) ? 0 : sizeof(std::uint32_t);
+            (mode == lab_prefix_mode::none)
+                ? 0
+                : (mode == lab_prefix_mode::tsi_then_toi_o1_word64
+                       ? sizeof(std::uint32_t) * 2
+                       : sizeof(std::uint32_t));
         prefixed.reserve(lct.bytes.size() + extra + payload.size());
         prefixed.insert(prefixed.end(), lct.bytes.begin(), lct.bytes.end());
         if (mode == lab_prefix_mode::tsi_word32) {
             append_u32_be(&prefixed, _cfg.lct_transport_session_identifier);
         } else if (mode == lab_prefix_mode::toi_o1_word32) {
+            append_u32_be(&prefixed, _cfg.lct_transport_object_identifier);
+        } else if (mode == lab_prefix_mode::tsi_then_toi_o1_word64) {
+            append_u32_be(&prefixed, _cfg.lct_transport_session_identifier);
             append_u32_be(&prefixed, _cfg.lct_transport_object_identifier);
         }
         prefixed.insert(prefixed.end(), payload.begin(), payload.end());

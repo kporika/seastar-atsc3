@@ -221,7 +221,7 @@ python3 -m pip install -r tools/requirements.txt
 
 ## M8 / M9 lab helpers
 
-- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is RFC 5651 LCT header **word‑0** in codegen; **`atsc3_gw`** **`--prepend-lct-word0 [--lct-codepoint N]`** with optional **`--lct-include-tsi --lct-tsi`** or **`--lct-include-toi --lct-toi`** prefixes **word‑0** (and **TSI** or RFC **O**=1 **TOI**) inside ALP ahead of ingress (max **2039** / **2043** user octets). **`mmt_probe verify`** **`--strip-lct-word0`** with **`--expect-lct-codepoint`**, optional **`--expect-lct-tsi`** / **`--expect-lct-toi`**, strips the lab header for asserts. Scripts: `./scripts/lct_word0_integration_test.sh` (**A/B/C** phases), **`make integ-lct-word0`**. ROUTE sessions / FEC / MMTP framing remain future work.
+- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is RFC 5651 LCT header **word‑0** in codegen; **`atsc3_gw`** **`--prepend-lct-word0 [--lct-codepoint N]`** accepts optional **`--lct-include-tsi --lct-tsi`** and/or **`--lct-include-toi --lct-toi`** (RFC order **TSI** then **TOI** when both; **`header_length_words`** **3** for the combo — max **2035** / **2039** / **2043** user octets by prefix size). **`mmt_probe verify`** **`--strip-lct-word0`** with **`--expect-lct-codepoint`** and optional **`--expect-lct-tsi`** / **`--expect-lct-toi`**, strips the lab header for asserts. Scripts: `./scripts/lct_word0_integration_test.sh` (**A–D** phases), **`make integ-lct-word0`**. ROUTE sessions / FEC / MMTP framing remain future work.
 - **M9:** `lib/runtime/lls_table6_1.hh` matches the **A/331 Table 6.1** four-byte prefix used by `lls://`. **`tools/m9_lls_pack.py`** reads cleartext XML (e.g. `fixtures/lls/minimal_slt.xml`) and writes **prefix + gzip** to stdout for piping into `lls://` or `POST /ingest` (base64-wrap as needed).
 
 ```bash
@@ -265,8 +265,9 @@ and writes the TLV-mux bytes to the sink.
 **M8 lab (optional ROUTE-ish framing):** pass **`--prepend-lct-word0`** to insert the
 RFC 5651 LCT header **first 32‑bit word** (see **`protocol/lct_rfc5651_word0.yaml`**
 _fixture `minimal_v1_c0`_) before ingress inside ALP. With word‑0 only (**`header_length_words=1`**), the opaque body is **4 bytes + user** (max **2043** user bytes).
-With **`--lct-include-tsi`** and **`--lct-tsi U32`** (RFC 5651 TSI BE32 — lab path **without** TOI on the wire, **`header_length_words=2`**), opaque is **8 bytes header + user** (max **2039** user bytes).
-**`--lct-codepoint N`** sets the **`codepoint`** (**0–255**; **`--prepend-lct-word0`** only). Optional **`--lct-include-tsi --lct-tsi`** or **`--lct-include-toi --lct-toi`** (mutually exclusive): append RFC 5651 **S**/TSI BE32 or **O**=1 TOI BE32 after word‑0. **`GET /config`** echoes **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`**, **`lct_include_toi`**, **`lct_toi`**.
+With **`--lct-include-tsi`** and **`--lct-tsi U32`** (RFC 5651 TSI BE32 — lab path **without** TOI on the wire, **`header_length_words=2`**), opaque is **8 bytes header + user** (max **2039** user bytes). With **`--lct-include-toi`** (**`--lct-toi`**) only (**RFC5651 O**=**1** TOI BE32 after word‑0, **`header_length_words=2`**, no **S**/TSI), same **8-byte** opaque prefix (**2039** user max).
+With **both** **`--lct-include-tsi`** and **`--lct-include-toi`**, the lab path emits word‑0 + **TSI BE32 + TOI BE32** (**`header_length_words=3`**; **CCI** omitted) — **12 bytes prefix**, max **2035** user bytes.
+**`--lct-codepoint N`** sets the **`codepoint`** (**0–255**; **`--prepend-lct-word0`** only). **`GET /config`** echoes **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`**, **`lct_include_toi`**, **`lct_toi`**.
 
 ```bash
 # Single shard, sink to a file (one file per shard: gw.out.shard0, ...)
@@ -344,7 +345,7 @@ curl -sSf -X POST http://127.0.0.1:8080/ingest \
 ```bash
 ./scripts/integration_test.sh                              # defaults: ./build, else ./build-docker
 ./scripts/integration_test.sh /path/to/custom-build        # explicit build dir
-./scripts/lct_word0_integration_test.sh                    # M8 LCT prefix (+ optional TSI phase)
+./scripts/lct_word0_integration_test.sh                    # M8 LCT word-0 phases A–D
 # Spawns gw, runs mmt_probe send + verify against a temp sink file,
 # then tears the gw down. Exits 0 on success.
 ```

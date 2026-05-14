@@ -331,6 +331,87 @@ int run_lct_prefix_toi(const char *label, std::uint8_t cp, std::uint32_t toi,
     return 0;
 }
 
+int run_lct_prefix_tsi_toi(const char *label, std::uint8_t cp,
+                           std::uint32_t tsi, std::uint32_t toi,
+                           const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline enc{
+        atsc3::gw::with_prepended_lab_lct_word0_tsi_toi(cp, tsi, toi)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body = alp.value.payload;
+    if (body.size() != payload.size() + 12u) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), payload.size() + 12u);
+        return 1;
+    }
+
+    auto lct = atsc3::lct_rfc5651_word0::decode(body.subspan(
+        0, sizeof(std::uint32_t)));
+    if (!lct.ok) {
+        std::fprintf(stderr, "[%s] lct_word0 decode failed: %s\n",
+                     label, lct.error.c_str());
+        return 1;
+    }
+    if (lct.value.codepoint != cp) {
+        std::fprintf(stderr, "[%s] lct codepoint got %u want %u\n", label,
+                     static_cast<unsigned>(lct.value.codepoint),
+                     static_cast<unsigned>(cp));
+        return 1;
+    }
+    if (!lct.value.tsi_flag || lct.value.toi_flag != 1 ||
+        lct.value.header_length_words != 3) {
+        std::fprintf(stderr,
+                     "[%s] lct word0: want S=1 toi(O)==1 hdr_len==3\n", label);
+        return 1;
+    }
+    const std::uint32_t tsi_obs = read_be32_at(body, 4);
+    const std::uint32_t toi_obs = read_be32_at(body, 8);
+    if (tsi_obs != tsi) {
+        std::fprintf(stderr, "[%s] TSI BE32 got %u want %u\n", label,
+                     static_cast<unsigned>(tsi_obs),
+                     static_cast<unsigned>(tsi));
+        return 1;
+    }
+    if (toi_obs != toi) {
+        std::fprintf(stderr, "[%s] TOI BE32 got %u want %u\n", label,
+                     static_cast<unsigned>(toi_obs),
+                     static_cast<unsigned>(toi));
+        return 1;
+    }
+    if (!span_equal(body.subspan(12),
+                    std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] payload tail mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu cp=%u tsi=%u toi=%u)\n", label,
+                payload.size(), wire.bytes.size(), static_cast<unsigned>(cp),
+                static_cast<unsigned>(tsi), static_cast<unsigned>(toi));
+    return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -447,7 +528,37 @@ int main() {
         run_lct_prefix_toi("lct-prefix-toi-empty", 0, 7u,
                            std::vector<std::byte>{});
 
-    // 12) 8-byte LCT TOI prefix: max user 2039, reject 2040
+    // 12) word-0 + TSI BE32 + TOI BE32 (RFC order; header_length_words = 3)
+    {
+        std::vector<std::byte> p{std::byte{0xFA}};
+        failures += run_lct_prefix_tsi_toi(
+            "lct-prefix-tsi-toi-cp9", 9, 0xDEADBEEFu, 0x00C0FFEEu, p);
+    }
+    failures +=
+        run_lct_prefix_tsi_toi("lct-prefix-tsi-toi-empty", 0, 3u, 777u,
+                               std::vector<std::byte>{});
+
+    // 13) 12-byte LCT TSI + TOI prefix: max user 2035, reject 2036
+    {
+        std::vector<std::byte> p(2035, std::byte{0x31});
+        failures += run_lct_prefix_tsi_toi("alp-max-prepend-tsi-toi-user-2035",
+                                         8, 0x11112222u, 0x33334444u, p);
+        std::vector<std::byte> too_big(2036, std::byte{0x31});
+        atsc3::gw::encoder_pipeline enc_bad{atsc3::gw::
+            with_prepended_lab_lct_word0_tsi_toi(8, 0x11112222u, 0x33334444u)};
+        auto r = enc_bad.encode(std::span<const std::byte>(too_big));
+        if (r.ok) {
+            std::fprintf(stderr,
+                         "[prepend-tsi-toi-oversize-2036] expected failure, got "
+                         "ok\n");
+            ++failures;
+        } else {
+            std::printf("[prepend-tsi-toi-oversize-2036] OK (rejected: %s)\n",
+                        r.error.c_str());
+        }
+    }
+
+    // 14) 8-byte LCT TOI prefix: max user 2039, reject 2040
     {
         std::vector<std::byte> p(2039, std::byte{0xEE});
         failures += run_lct_prefix_toi("alp-max-prepend-toi-user-2039", 3,

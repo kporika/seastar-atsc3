@@ -34,8 +34,9 @@
 //
 //       When --strip-lct-word0 is set (gateway was run with
 //       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
-//       opaque body. Lab extensions after word‑0: 32-bit TSI (**S** set) or
-//       32-bit TOI (**O**=1, `toi_flag` value 1 — --expect-lct-toi).
+//       opaque body. Lab extensions after word‑0: 32‑bit **TSI** (**S**) and/or
+//       (RFC order) **O**=1 **TOI** 32‑bit (`toi_flag` value **1**); match with
+//       --expect-lct-tsi / --expect-lct-toi when asserting values.
 //
 //   rtcm-gen --out PATH --frames N [--msg-type T] [--seed S]
 //                                  [--payload-bytes B]
@@ -438,10 +439,6 @@ int do_verify(const opts &o) {
         std::cerr << "verify: --expect-lct-toi requires --strip-lct-word0\n";
         return 2;
     }
-    if (o.expect_lct_tsi.has_value() && o.expect_lct_toi.has_value()) {
-        std::cerr << "verify: --expect-lct-tsi and --expect-lct-toi are mutually exclusive\n";
-        return 2;
-    }
     if (o.expected.empty() && !o.validate_rtcm) {
         std::cerr << "verify: --expected-payloads or --validate-rtcm required\n";
         return 2;
@@ -529,6 +526,34 @@ int do_verify(const opts &o) {
                     std::cerr << "verify: TLV #" << idx << " LCT TSI want 0x"
                               << std::hex << *o.expect_lct_tsi << " got 0x"
                               << got_ts << std::dec << "\n";
+                    return 1;
+                }
+                off += sizeof(std::uint32_t);
+            } else if (lv.tsi_flag && lv.toi_flag == 1 &&
+                       !lv.half_word_flag &&
+                       lv.header_length_words == 3) {
+                if (alp_body.size() < off + 2 * sizeof(std::uint32_t)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " truncated TSI+TOI after word0\n";
+                    return 1;
+                }
+                const std::uint32_t got_ts =
+                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                if (o.expect_lct_tsi.has_value() &&
+                    *o.expect_lct_tsi != got_ts) {
+                    std::cerr << "verify: TLV #" << idx << " LCT TSI want 0x"
+                              << std::hex << *o.expect_lct_tsi << " got 0x"
+                              << got_ts << std::dec << "\n";
+                    return 1;
+                }
+                off += sizeof(std::uint32_t);
+                const std::uint32_t got_toi =
+                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                if (o.expect_lct_toi.has_value() &&
+                    *o.expect_lct_toi != got_toi) {
+                    std::cerr << "verify: TLV #" << idx << " LCT TOI want 0x"
+                              << std::hex << *o.expect_lct_toi << " got 0x"
+                              << got_toi << std::dec << "\n";
                     return 1;
                 }
                 off += sizeof(std::uint32_t);

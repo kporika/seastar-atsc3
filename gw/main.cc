@@ -73,15 +73,16 @@ int main(int argc, char** argv) {
          "when --prepend-lct-word0: LCT codepoint octet (0-255)")
         ("lct-include-tsi",
          bpo::bool_switch()->default_value(false),
-         "when --prepend-lct-word0: append 32-bit big-endian RFC 5651 TSI "
-         "(header_length_words=2 lab path; no TOI on wire)")
+         "when --prepend-lct-word0: append 32-bit big-endian RFC 5651 TSI after "
+         "word‑0 (--lct-tsi); with --lct-include-toi, TSI precedes TOI "
+         "(header_length_words=3)")
         ("lct-tsi",
          bpo::value<std::uint32_t>()->default_value(0),
          "when --prepend-lct-word0 and --lct-include-tsi: Transport Session Id")
         ("lct-include-toi",
          bpo::bool_switch()->default_value(false),
-         "when --prepend-lct-word0: append 32-bit BE TOI per RFC5651 O=1 "
-         "(header_length_words=2; mutually exclusive with --lct-include-tsi)")
+         "when --prepend-lct-word0: append 32-bit BE TOI per RFC 5651 O=1 "
+         "(header_length_words=2 alone, or =3 combined with --lct-include-tsi)")
         ("lct-toi",
          bpo::value<std::uint32_t>()->default_value(0),
          "when --prepend-lct-word0 and --lct-include-toi: Transport Object Id");
@@ -109,17 +110,16 @@ int main(int argc, char** argv) {
             mlog.error("--lct-include-toi requires --prepend-lct-word0");
             co_return 2;
         }
-        if (lct_include_tsi && lct_include_toi) {
-            mlog.error("--lct-include-tsi and --lct-include-toi are mutually exclusive");
-            co_return 2;
-        }
         if (cp_in > std::numeric_limits<std::uint8_t>::max()) {
             mlog.error("--lct-codepoint must be <= 255");
             co_return 2;
         }
         atsc3::gw::encoder_pipeline::config enc_cfg{};
         if (prepend_lct) {
-            if (lct_include_tsi) {
+            if (lct_include_tsi && lct_include_toi) {
+                enc_cfg = atsc3::gw::with_prepended_lab_lct_word0_tsi_toi(
+                    static_cast<std::uint8_t>(cp_in), lct_tsi, lct_toi);
+            } else if (lct_include_tsi) {
                 enc_cfg = atsc3::gw::with_prepended_lab_lct_word0_tsi(
                     static_cast<std::uint8_t>(cp_in), lct_tsi);
             } else if (lct_include_toi) {
@@ -196,8 +196,8 @@ int main(int argc, char** argv) {
             static_cast<unsigned>(gcfg.encoder.lct_word0.codepoint),
             prepend_lct && gcfg.encoder.lct_word0.tsi_flag ? "yes" : "no",
             gcfg.encoder.lct_transport_session_identifier,
-            prepend_lct && !gcfg.encoder.lct_word0.tsi_flag &&
-                    gcfg.encoder.lct_word0.toi_flag == 1
+            prepend_lct && gcfg.encoder.lct_word0.toi_flag == 1 &&
+                    !gcfg.encoder.lct_word0.half_word_flag
                 ? "yes"
                 : "no",
             gcfg.encoder.lct_transport_object_identifier,

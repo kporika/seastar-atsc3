@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Integration: (A) word-0 only; (B) + TSI BE32; (C) + TOI (**RFC5651 O**=1).
+# Integration: (A) word-0 only; (B) + TSI BE32; (C) + TOI (**RFC5651 O**=1);
+#              (D) + TSI then TOI (**header_length_words**=**3**, **CCI** omitted).
 #
 # Usage:
 #   scripts/lct_word0_integration_test.sh [BUILD_DIR]
@@ -95,6 +96,7 @@ run_phase() {
 port_a=$(( ( RANDOM % 10000 ) + 29000 ))
 port_b=$(( ( RANDOM % 10000 ) + 39000 ))
 port_c=$(( ( RANDOM % 10000 ) + 49000 ))
+port_d=$(( ( RANDOM % 10000 ) + 59000 ))
 
 echo "[lct_word0_integ] phase A: word-0 only (codepoint=${lct_cp})"
 run_phase "A" "${port_a}" "${tmpdir}/a.out" "${tmpdir}/gw_a.log"
@@ -121,6 +123,18 @@ run_phase "C" "${port_c}" "${tmpdir}/c.out" "${tmpdir}/gw_c.log" \
     --file "${tmpdir}/c.out.shard0" \
     --strip-lct-word0 \
     --expect-lct-codepoint "${lct_cp}" \
+    --expect-lct-toi "${lct_toi}" \
+    --expected-payloads "${payloads}"
+
+echo "[lct_word0_integ] phase D: word-0 + TSI (${lct_tsi}) + TOI O=1 (${lct_toi})"
+run_phase "D" "${port_d}" "${tmpdir}/d.out" "${tmpdir}/gw_d.log" \
+    --lct-include-tsi --lct-tsi "${lct_tsi}" \
+    --lct-include-toi --lct-toi "${lct_toi}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/d.out.shard0" \
+    --strip-lct-word0 \
+    --expect-lct-codepoint "${lct_cp}" \
+    --expect-lct-tsi "${lct_tsi}" \
     --expect-lct-toi "${lct_toi}" \
     --expected-payloads "${payloads}"
 

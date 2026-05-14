@@ -218,7 +218,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "ROUTE / LCT packetizer",
         status: "in-flight",
         notes:
-            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); gw --prepend-lct-word0 adds word-0 (optional --lct-include-tsi) inside ALP ahead of payloads (lab); full ALC/ROUTE sessions + source/repair still missing",
+            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); gw --prepend-lct-word0 adds word-0 (optional --lct-include-tsi / --lct-include-toi, or both: TSI+TOI ⇒ header_length_words=3; CCI omitted lab) inside ALP ahead of payloads; full ALC/ROUTE sessions + source/repair still missing",
     },
     {
         layer: "Transport",
@@ -241,7 +241,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw --prepend-lct-word0 lab prefix (+ optional BE32 TSI) inside ALP; full ROUTE/ALC/MMTP wire not in gw yet",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw --prepend-lct-word0 lab prefix (optional BE32 TSI / TOI(O=1), or both RFC order) inside ALP; full ROUTE/ALC/MMTP wire not in gw yet",
     },
     // --- link (this is us) ---
     {
@@ -430,7 +430,7 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
-            "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) expands the lab header before ingress. " +
+            "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) / --lct-include-toi (--lct-toi); both ⇒ TSI then TOI (hdr_len_words=3, max user 2035 vs 2039 word-0-only + one field vs 2043 word-0-only). ",
             "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
             "ALP encapsulation already accepts opaque payloads.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
@@ -615,7 +615,7 @@ export default function Atsc3EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutators {\"sink_uri\"} only), GET/POST/PATCH/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi), optional --services-state-file, GET /healthz, /readyz, /metrics; optional --admin-bearer-token + PEM TLS (--admin-tls-cert/--admin-tls-key); Operator tab via Vite /__atsc3_admin → ATSC3_ADMIN_URL; tools/atsc3ctl.py",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutators {\"sink_uri\"} only), GET/POST/PATCH/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi and/or --lct-include-toi --lct-toi), optional --services-state-file, GET /healthz, /readyz, /metrics; optional --admin-bearer-token + PEM TLS (--admin-tls-cert/--admin-tls-key); Operator tab via Vite /__atsc3_admin → ATSC3_ADMIN_URL; tools/atsc3ctl.py",
                         ]}
                     />
                     <BulletGroup
@@ -632,7 +632,7 @@ export default function Atsc3EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml + gw --prepend-lct-word0 (+ optional BE32 --lct-include-tsi) (RFC 5651 LCT ahead of ingress inside ALP)",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml + gw --prepend-lct-word0 (+ optional BE32 --lct-include-tsi / --lct-include-toi / both) (RFC 5651 LCT ahead of ingress inside ALP)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -874,7 +874,7 @@ export default function Atsc3EndToEndGaps() {
                                         --lct-codepoint
                                     </Text>
                                     {" "}
-                                    (optional{" "}
+                                    (optional BE32 RFC fields:{" "}
                                     <Text as="span" weight="semibold">
                                         --lct-include-tsi
                                     </Text>
@@ -882,8 +882,16 @@ export default function Atsc3EndToEndGaps() {
                                     <Text as="span" weight="semibold">
                                         --lct-tsi
                                     </Text>
-                                    ; RFC&nbsp;5651 word‑0 + optional BE32 TSI inside ALP; max 2039 /
-                                    2043 user octets; GET /config echoes LCT fields), plus health/metrics routes when you pass{" "}
+                                    {", "}
+                                    <Text as="span" weight="semibold">
+                                        --lct-include-toi
+                                    </Text>
+                                    {" + "}
+                                    <Text as="span" weight="semibold">
+                                        --lct-toi
+                                    </Text>
+                                    {", or both for TSI then TOI; "}
+                                    RFC&nbsp;5651 word‑0 + lab extensions inside ALP; max user 2035 / 2039 / 2043 octets by prefix size; GET /config echoes LCT fields), plus health/metrics routes when you pass{" "}
                                     <Text as="span" weight="semibold">
                                         --admin-http host:port
                                     </Text>

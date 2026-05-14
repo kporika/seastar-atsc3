@@ -21,14 +21,16 @@
 //
 // Limits:
 //   * Without LCT prepend: opaque payload ≤ 2047 bytes (ALP 11-bit length).
-//   * With prepend_rfc5651_lct_word0: ALP opaque = [word‑0] [optional 32-bit BE
-//     TSI or 32-bit TOI] ∪ user octets ≤ 2047 total.
-//     · word‑0 only (`header_length_words == 1`, default helper): ≤ 2043 user.
-//     · word‑0 + TSI (`header_length_words == 2`, `tsi_flag`; **O**/**TOI**
-//       field cleared): ≤ 2039 user.
-//     · word‑0 + TOI (**RFC 5651 O**`=1`: one 32-bit TOI word, `toi_flag ==
-//       1` in YAML; **`tsi_flag` false**): ≤ 2039 user. (CCI extensions not
-//       modeled — lab stitch.)
+//   * With prepend_rfc5651_lct_word0: ALP opaque = word‑0 (32b) ∪ optional RFC
+//     reorder fields ∪ user ≤ 2047 total (**CCI omitted** lab stitch).
+//     · word‑0 only (`header_length_words == 1`): ≤ 2043 user.
+//     · + 32‑bit **TSI** (`header_length_words == 2`, **S**=**1**, **O**=**0**):
+//       ≤ 2039 user.
+//     · + 32‑bit **TOI**, **O**=**1** (`header_length_words == 2`, **S**=**0**):
+//       ≤ 2039 user.
+//     · + **TSI** then **TOI** (**S**=**1**, **O**=**1**, `header_length_words == 3`):
+//       ≤ 2035 user.
+
 //   * TLV-mux packet_length is 16 bits → ALP packet must be ≤ 65535 bytes.
 //
 // Both upper bounds are checked; oversize input returns an error result
@@ -64,10 +66,17 @@ public:
         ///   * `header_length_words == 2`, **S**=1, **O**=0,
         ///     `half_word_flag == false`: word‑0 + 32‑bit TSI BE
         ///     (`lct_transport_session_identifier`).
-        ///   * `header_length_words == 2`, **S**=0, **O**=1 (`toi_flag == 1`),
+        ///   * `header_length_words == 2`, **S**=1, **O**=0,
+        ///     `half_word_flag == false`: word‑0 + 32‑bit TSI BE
+        ///     (`lct_transport_session_identifier`).
+        ///   * `header_length_words == 2`, **S**=0, **O**=**1** (`toi_flag == 1`),
         ///     `half_word_flag == false`: word‑0 + 32‑bit TOI BE
         ///     (`lct_transport_object_identifier`).
+        ///   * `header_length_words == 3`, **S**=**1**, **O**=**1** (`toi_flag == 1`),
+        ///     `half_word_flag == false`: word‑0 + 32‑bit TSI BE + 32‑bit TOI BE
+        ///     (**RFC Figure 1** order; **CCI** still omitted lab‑only).
         bool prepend_rfc5651_lct_word0 = false;
+
         atsc3::lct_rfc5651_word0::decoded_t lct_word0{};
         std::uint32_t lct_transport_session_identifier = 0;
         std::uint32_t lct_transport_object_identifier  = 0;
@@ -131,6 +140,31 @@ private:
     w.close_session                              = false;
     w.close_object                               = false;
     w.header_length_words                        = 2;
+    w.codepoint                                  = codepoint;
+    return base;
+}
+
+/// Word‑0 + 32‑bit **TSI** (**S**=**1**) + 32‑bit **TOI** (**O**=**1** in `toi_flag`).
+/// **`header_length_words = 3`**, **CCI** omitted (same lab caveat as sibling helpers).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_lct_word0_tsi_toi(
+    std::uint8_t codepoint,
+    std::uint32_t tsi,
+    std::uint32_t toi,
+    encoder_pipeline::config base = {}) noexcept {
+    base.prepend_rfc5651_lct_word0               = true;
+    base.lct_transport_session_identifier        = tsi;
+    base.lct_transport_object_identifier         = toi;
+    auto& w                                      = base.lct_word0;
+    w.lct_version                                = 1;
+    w.congestion_flag_c                          = 0;
+    w.protocol_specific_indication               = 0;
+    w.tsi_flag                                   = true;
+    w.toi_flag                                   = 1;
+    w.half_word_flag                             = false;
+    w.reserved_two                               = 0;
+    w.close_session                              = false;
+    w.close_object                               = false;
+    w.header_length_words                        = 3;
     w.codepoint                                  = codepoint;
     return base;
 }
