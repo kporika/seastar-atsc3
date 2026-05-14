@@ -4,6 +4,8 @@
 # Present **only** when **packet_counter_flag** (**C**) in `mmtp_header_word0`
 # is **1**. On the wire it **immediately follows** `mmtp_header_ts_psn`
 # (timestamp + packet_sequence_number). If **C**=**0**, omit these four octets.
+# When **extension_flag** (**X**) in word‑0 is **1**, one or more
+# **`mmtp_header_extension`** TLVs follow the counter (or follow **ts_psn** if **C**=**0**).
 #
 # Bit order: MSB-first within each octet.
 

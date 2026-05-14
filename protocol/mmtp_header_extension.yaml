@@ -1,0 +1,44 @@
+# MMTP — one header extension block (Figure 2).
+# Normative reference: ISO/IEC 23008-1 (MPEG-MMT) — MMTP header extension.
+#
+# On the wire this **follows** `mmtp_header_word0` + `mmtp_header_ts_psn` +
+# optional `mmtp_header_counter32` (when **C**=**1**) when **extension_flag**
+# (**X**) in word‑0 is **1**. Multiple extensions may be chained; each unit is
+# **extension_type** (16 BE) + **extension_length_bytes** (16 BE, length of
+# **payload** only) + **extension_length_bytes** octets of opaque value.
+#
+# `payload` uses **byte** count from **extension_length_bytes** (same units as
+# the spec’s *length* field).
+
+protocol:
+  name: mmtp_header_extension
+  proto_id: 10
+  spec: "ISO/IEC 23008-1 (MMTP header extension)"
+  description: "MMTP header extension — 16-bit type + 16-bit length (bytes) + opaque value"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: extension_type, bit_offset: 0, bit_width: 16, type: uint }
+    - { name: extension_length_bytes, bit_offset: 16, bit_width: 16, type: uint }
+
+payload:
+  length_field: extension_length_bytes
+  kind: opaque
+
+fixtures:
+  - name: empty_value
+    description: "type=1, extension_length_bytes=0 (no value octets)"
+    raw_hex: "00 01 00 00"
+    expected:
+      extension_type: 1
+      extension_length_bytes: 0
+      payload_hex: ""
+
+  - name: four_byte_value
+    description: "type=0xABCD, length=4, value DEADBEEF"
+    raw_hex: "AB CD 00 04 DE AD BE EF"
+    expected:
+      extension_type: 43981
+      extension_length_bytes: 4
+      payload_hex: "DEADBEEF"

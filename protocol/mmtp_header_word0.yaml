@@ -9,7 +9,8 @@
 # slices / opaque trailers when we wire a full depacketizer.
 #
 # Follow-on codecs: **`mmtp_header_ts_psn.yaml`** (timestamp + PSN),
-# **`mmtp_header_counter32.yaml`** (present when **C**=**1**).
+# **`mmtp_header_counter32.yaml`** (present when **C**=**1**),
+# **`mmtp_header_extension.yaml`** (one **X** block: type + length + value; repeat on wire for multiple extensions).
 #
 # Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
 

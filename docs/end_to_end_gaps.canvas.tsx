@@ -226,7 +226,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "MMTP packetizer + signaling msgs",
         status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + mmtp_header_ts_psn + mmtp_header_counter32 (ISO/IEC 23008-1 header rows 1–4 split); header_extension (X), MFU/PA/MPI/MPT payloads + gw prefix still missing",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); MFU/PA/MPI/MPT payload headers + gw prefix + multi-ext assembly still missing",
     },
     {
         layer: "Transport",
@@ -433,7 +433,7 @@ const ROADMAP: ReadonlyArray<{
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
             "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) / --lct-include-toi (--lct-toi); both ⇒ TSI then TOI (hdr_len_words=3, max user 2035 vs 2039 word-0-only + one field vs 2043 word-0-only). " +
             "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: MMTP header_extension (X) + MFU / PA / MPI / MPT payload headers.",
+            "ALP encapsulation already accepts opaque payloads. Next: MMTP payload-type headers (ISOBMFF / signalling per payload_type) + gw prefix.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
@@ -634,7 +634,7 @@ export default function Atsc3EndToEndGaps() {
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
                             "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml + gw --prepend-lct-word0 (+ optional BE32 --lct-include-tsi / --lct-include-toi / both) (RFC 5651 LCT ahead of ingress inside ALP)",
-                            "protocol/mmtp_header_word0.yaml — MMTP word 0; mmtp_header_ts_psn.yaml — timestamp+PSN; mmtp_header_counter32.yaml — optional counter (C=1)",
+                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X: type+len+opaque, one block)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -642,7 +642,7 @@ export default function Atsc3EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (33 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (35 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",

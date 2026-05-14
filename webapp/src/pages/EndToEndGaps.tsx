@@ -222,7 +222,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "MMTP packetizer + signaling msgs",
         status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + mmtp_header_ts_psn + mmtp_header_counter32 (ISO/IEC 23008-1 header rows 1–4 split); header_extension (X), MFU/PA/MPI/MPT payloads + gw prefix still missing",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); MFU/PA/MPI/MPT payload headers + gw prefix + multi-ext assembly still missing",
     },
     {
         layer: "Transport",
@@ -237,7 +237,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw prepend (optional BE32 TSI / TOI(O=1), or both); MMTP header YAML: mmtp_header_word0 + mmtp_header_ts_psn + mmtp_header_counter32 (codegen); full ROUTE/ALC/MMTP stack not in gw yet",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw prepend (optional BE32 TSI / TOI(O=1), or both); MMTP header YAML: word0 + ts_psn + counter32 + extension (codegen); full ROUTE/ALC/MMTP stack not in gw yet",
     },
     {
         layer: "Link",
@@ -420,7 +420,7 @@ const ROADMAP: ReadonlyArray<{
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
             "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab). " +
             "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: MMTP header_extension (X) + MFU / PA / MPI / MPT payload headers.",
+            "ALP encapsulation already accepts opaque payloads. Next: MMTP payload-type headers (ISOBMFF / signalling per payload_type) + gw prefix.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
@@ -643,7 +643,7 @@ export default function EndToEndGaps() {
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
                             "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi / --lct-include-toi / both)",
-                            "protocol/mmtp_header_word0.yaml — MMTP word 0; mmtp_header_ts_psn.yaml — timestamp+PSN; mmtp_header_counter32.yaml — optional counter (C=1)",
+                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X: type+len+opaque, one block)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -651,7 +651,7 @@ export default function EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (33 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (35 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",
