@@ -224,9 +224,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Transport",
         spec: "A/331 §10",
         component: "MMTP packetizer + signaling msgs",
-        status: "missing",
+        status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 descriptor TLVs only; next: ISO/IEC 23008-1 clause 9 MMTP packet header + payload modes (MFU, PA/MPI/MPT), then optional gw lab prefix like LCT",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; protocol/mmtp_header_word0.yaml = ISO/IEC 23008-1 MMTP header first 32b (V,C,FEC,flags,type,packet_id); timestamp/PSN/packet_counter/extensions + MFU + PA/MPI/MPT + gw prefix still missing",
     },
     {
         layer: "Transport",
@@ -432,13 +432,13 @@ const ROADMAP: ReadonlyArray<{
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
             "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) / --lct-include-toi (--lct-toi); both ⇒ TSI then TOI (hdr_len_words=3, max user 2035 vs 2039 word-0-only + one field vs 2043 word-0-only). " +
-            "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: ISO/IEC 23008-1 MMTP packet header (clause 9) as YAML.",
+            "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
+            "ALP encapsulation already accepts opaque payloads. Next: MMTP header continuation (timestamp, packet_sequence_number, optional packet_counter) + payload headers.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
             "ROUTE/LCT packetizer (partial: word-0 YAML + gw prepend + optional TSI/TOI bytes)",
-            "MMTP packetizer",
+            "MMTP packetizer (partial: mmtp_header_word0.yaml + mmtp_desc)",
             "Raptor10/RaptorQ FEC",
         ],
     },
@@ -634,6 +634,7 @@ export default function Atsc3EndToEndGaps() {
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
                             "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml + gw --prepend-lct-word0 (+ optional BE32 --lct-include-tsi / --lct-include-toi / both) (RFC 5651 LCT ahead of ingress inside ALP)",
+                            "protocol/mmtp_header_word0.yaml — MMTP packet header word 0 (ISO/IEC 23008-1)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -641,7 +642,7 @@ export default function Atsc3EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (27 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (29 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",

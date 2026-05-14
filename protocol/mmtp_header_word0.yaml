@@ -1,0 +1,59 @@
+# MMTP — first 32-bit word of the MMTP packet header (Figure 1, row 1).
+# Normative reference: ISO/IEC 23008-1 (MPEG-MMT) — MMTP packet header; field
+# names and widths match the published MMTP header syntax (same layout as the
+# informative MPEG MMTP draft Figure 1).
+#
+# This YAML models **only** the fixed first word. Timestamp (32b),
+# packet_sequence_number (32b), optional packet_counter (32b, if C=1),
+# optional header_extension (if X=1), and payload are separate follow-on
+# slices / opaque trailers when we wire a full depacketizer.
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_header_word0
+  proto_id: 7
+  spec: "ISO/IEC 23008-1 (MMTP packet header)"
+  description: "MMTP header — first 32 bits (V, C, FEC, r, X, R, RES, type, packet_id)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: mmtp_version, bit_offset: 0, bit_width: 2, type: uint }
+    - { name: packet_counter_flag, bit_offset: 2, bit_width: 1, type: bool }
+    - { name: fec_type, bit_offset: 3, bit_width: 2, type: uint }
+    - { name: reserved_r, bit_offset: 5, bit_width: 1, type: uint }
+    - { name: extension_flag, bit_offset: 6, bit_width: 1, type: bool }
+    - { name: rap_flag, bit_offset: 7, bit_width: 1, type: bool }
+    - { name: reserved_two, bit_offset: 8, bit_width: 2, type: uint }
+    - { name: payload_type, bit_offset: 10, bit_width: 6, type: uint }
+    - { name: packet_id, bit_offset: 16, bit_width: 16, type: uint }
+
+fixtures:
+  - name: signalling_pid0010
+    description: "V=0, C=0, FEC=0, type=0x02 (signalling), packet_id=0x0010 → 00 02 00 10"
+    raw_hex: "00 02 00 10"
+    expected:
+      mmtp_version: 0
+      packet_counter_flag: false
+      fec_type: 0
+      reserved_r: 0
+      extension_flag: false
+      rap_flag: false
+      reserved_two: 0
+      payload_type: 2
+      packet_id: 16
+
+  - name: isobmff_pid0001
+    description: "V=0, type=0x00 (ISOBMFF mode), packet_id=1 → 00 00 00 01"
+    raw_hex: "00 00 00 01"
+    expected:
+      mmtp_version: 0
+      packet_counter_flag: false
+      fec_type: 0
+      reserved_r: 0
+      extension_flag: false
+      rap_flag: false
+      reserved_two: 0
+      payload_type: 0
+      packet_id: 1
