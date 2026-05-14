@@ -55,7 +55,7 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - TCP length-prefix ingress: `[u32 BE length] [payload]`
 - Per-shard `SO_REUSEPORT` load balancing on the listen socket
 - RTCM v3 frames as a special-case payload via `mmt_probe --rtcm-file`
-- Optional HTTP admin (`--admin-http host:port`): `POST /ingest`, `GET /healthz`, `/readyz`, `/metrics`, **`GET /config`**, **`POST /config/sink`** (JSON `{"sink_uri":"…"}` only — reliable hot-swap on all shards; same handler as **`PATCH` / `PUT` /config**), **`GET /services`** / **`POST /services`** / **`DELETE /services?id=`**; optional **`--services-state-file`** persists the service registry as JSON (shard 0; see `gw/atsc3_gw.cc`)
+- Optional HTTP admin (`--admin-http host:port`): `POST /ingest`, `GET /healthz`, `/readyz`, `/metrics`, **`GET /config`**, **`POST /config/sink`** (JSON `{"sink_uri":"…"}` only — reliable hot-swap on all shards; same handler as **`PATCH` / `PUT` /config**), **`GET /services`** / **`POST /services`** / **`DELETE /services?id=`**; optional **`--services-state-file`** persists the service registry as JSON (shard 0; see `gw/atsc3_gw.cc`). Thin **Operator** tab in `webapp/` (local `npm run dev`) calls the same API via Vite proxy **`/__atsc3_admin`** → **`ATSC3_ADMIN_URL`** (default `http://127.0.0.1:8080`). Shell automation: **`tools/atsc3ctl.py`** (`ATSC3_ADMIN` or `--base`). Reference JSON for compose/argv: **`examples/gw.operator.example.json`**
 
 **What it produces on the wire**
 - ALP packet: 16-bit base header + opaque payload (≤ 2047 B)
@@ -115,9 +115,9 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 
 | Spec | Component                          | Status  | Notes                                                  |
 |------|------------------------------------|---------|--------------------------------------------------------|
-| —    | Web UI (operator dashboard)        | MISSING | Service list, PLP map, telemetry, push-to-broadcast    |
-| —    | REST or gRPC control API           | PARTIAL | `--admin-http`: `POST /ingest`, `GET /metrics`, **`GET /config`**, **`POST /config/sink`** / **`PATCH` / `PUT` /config** (body `{"sink_uri":"…"}` only — runtime sink swap on all shards), **`GET /services`**, **`POST /services`**, **`DELETE /services?id=`**, `GET /healthz` / `readyz`; optional `service_id` on ingest when present; **`--services-state-file`** persists `/services`; per-service sink routing, TLS, and full operator schema still missing |
-| —    | Service config persistence         | PARTIAL | **`--services-state-file`**: JSON snapshot of `/services` (shard 0); full operator YAML/SQLite + schema versioning still missing |
+| —    | Web UI (operator dashboard)        | PARTIAL | Thin **Operator** tab in `webapp/` (Vite dev proxy **`/__atsc3_admin`**); config/services/metrics/sink; full dashboard (PLP map, telemetry, push-to-broadcast) still missing; static GitHub Pages build has no admin backend |
+| —    | REST or gRPC control API           | PARTIAL | `--admin-http`: `POST /ingest`, `GET /metrics`, **`GET /config`**, **`POST /config/sink`** / **`PATCH` / `PUT` /config** (body `{"sink_uri":"…"}` only — runtime sink swap on all shards), **`GET /services`**, **`POST /services`**, **`DELETE /services?id=`**, `GET /healthz` / `readyz`; optional `service_id` on ingest when present; **`--services-state-file`** persists `/services`; **`tools/atsc3ctl.py`** (stdlib) mirrors the same paths; per-service sink routing, TLS, gRPC, and full operator schema still missing |
+| —    | Service config persistence         | PARTIAL | **`--services-state-file`**: JSON snapshot of `/services` (shard 0); **`examples/gw.operator.example.json`** for argv/compose reference; full operator YAML/SQLite + schema versioning still missing |
 
 ### Content
 
@@ -204,11 +204,14 @@ unlocks a concrete capability you can demo end-to-end.
 REST or gRPC API + a service-config YAML schema persisted under
 `/var/lib/atsc3_proto`. Replaces the current TCP-only ingress with a
 first-class operator surface: declare a service, attach a content source,
-push it. Includes a CLI (`atsc3ctl`) and a thin web UI as the smallest
-deliverable that an operator can actually use.
+push it. **Shipped for M7 (minimal operator surface):** **`tools/atsc3ctl.py`**
+(stdlib HTTP), webapp **Operator** tab (local dev via Vite **`/__atsc3_admin`**
+→ **`ATSC3_ADMIN_URL`**), and **`examples/gw.operator.example.json`** for
+compose/argv reference. Full YAML/SQLite persistence, gRPC, TLS, and a
+production-grade dashboard remain future work.
 
-**Unlocks:** A human (or upstream system) can say *"broadcast this"* (incrementally: HTTP admin + optional service JSON file today; **`POST /config/sink`** or **`PATCH` / `PUT` /config** hot-swaps **`sink_uri`** on all shards).
-**Closes:** Web UI · REST/gRPC API (partial: incl. **`POST /config/sink`** / **`PATCH` / `PUT` /config** for sink only) · Service config persistence (partial: `--services-state-file`).
+**Unlocks:** A human (or upstream system) can drive **`--admin-http`** from curl, **`tools/atsc3ctl.py`**, or the webapp **Operator** tab in dev (Vite **`/__atsc3_admin`** proxy); optional service registry JSON via **`--services-state-file`**; **`POST /config/sink`** / **`PATCH` / `PUT` /config** hot-swaps **`sink_uri`** on all shards.
+**Closes:** Web UI (partial: Operator tab + dev proxy; full dashboard still open) · REST (partial: admin HTTP + **`atsc3ctl`**; gRPC/TLS/per-service sinks still open) · Service config persistence (partial: **`--services-state-file`** + **`examples/gw.operator.example.json`**).
 
 ### M8 — Network + transport (UDP/IP, ROUTE/LCT, MMTP)
 

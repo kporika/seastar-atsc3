@@ -41,6 +41,7 @@ atsc3_proto/
 │   └── mmtp_desc_loop.yaml    #   length-prefixed loop of mmtp_desc (M6 example)
 ├── tools/
 │   ├── codegen.py             # YAML → C++ (jinja2 templates)
+│   ├── atsc3ctl.py            # M7: stdlib CLI for --admin-http (config, services, ingest, metrics)
 │   ├── codegen_templates/     # types.h, decoder.{h,cc}, encoder.{h,cc},
 │   │                          # tojson.{h,cc}, fromjson.{h,cc}, fixtures_test.cc
 │   ├── lint_protomap.py       # schema validator
@@ -87,6 +88,8 @@ atsc3_proto/
 │   ├── rtcm_integration_test.sh   # rtcm-gen → gw → send → verify --validate-rtcm
 │   └── throughput_soak.sh     # null:// sink + duration-bounded burst
 ├── fixtures/lls/              # M9 lab: minimal_slt.xml (SLT stub XML)
+├── examples/                  # reference JSON for operator/automation (gw flags)
+│   └── gw.operator.example.json
 ├── docs/                      # architecture notes + gap analyses
 │   ├── END_TO_END_GAPS.md     #   full inventory: input API → RF exciter
 │   └── end_to_end_gaps.canvas.tsx  # Cursor-canvas rendering of the same
@@ -102,6 +105,22 @@ atsc3_proto/
 ├── build.sh
 └── Makefile
 ```
+
+### Operator CLI and thin web UI (M7)
+
+With **`--admin-http`**, you can drive the same JSON endpoints from the shell
+via **`tools/atsc3ctl.py`** (Python 3 stdlib only; no pip install):
+
+```bash
+export ATSC3_ADMIN=http://127.0.0.1:8080   # or: --base http://...
+python3 tools/atsc3ctl.py health
+python3 tools/atsc3ctl.py config get
+python3 tools/atsc3ctl.py services list
+```
+
+For a browser UI during local development, run **`cd webapp && npm install && npm run dev`**, start the gateway with **`--admin-http`**, open the **Operator** tab, and set **`ATSC3_ADMIN_URL`** if the admin bind is not `http://127.0.0.1:8080` (the dev server proxies **`/__atsc3_admin`** to that URL). The static GitHub Pages build does not include an admin backend; use **`atsc3ctl`** or curl there.
+
+Compose-oriented defaults live in **`examples/gw.operator.example.json`** (reference only; **`atsc3_gw`** still takes argv flags).
 
 ## Build
 

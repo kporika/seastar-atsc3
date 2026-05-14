@@ -42,6 +42,7 @@ WORKDIR /src/atsc3_proto
 COPY CMakeLists.txt build.sh ./
 COPY tools/         ./tools/
 COPY fixtures/    ./fixtures/
+COPY examples/    ./examples/
 COPY protocol/      ./protocol/
 COPY lib/           ./lib/
 COPY gw/            ./gw/
@@ -108,7 +109,11 @@ COPY --from=builder /src/atsc3_proto/scripts                     /opt/atsc3_prot
 COPY --from=builder /src/atsc3_proto/tools/smoke                 /opt/atsc3_proto/tools/smoke
 COPY --from=builder /src/atsc3_proto/tools/m9_lls_pack.py        /opt/atsc3_proto/tools/m9_lls_pack.py
 COPY --from=builder /src/atsc3_proto/tools/m8_bin_to_pcap.py     /opt/atsc3_proto/tools/m8_bin_to_pcap.py
+COPY --from=builder /src/atsc3_proto/tools/atsc3ctl.py             /opt/atsc3_proto/tools/atsc3ctl.py
+COPY --from=builder /src/atsc3_proto/examples/gw.operator.example.json /opt/atsc3_proto/examples/gw.operator.example.json
 COPY --from=builder /src/atsc3_proto/fixtures                    /opt/atsc3_proto/fixtures
+
+RUN chmod +x /opt/atsc3_proto/tools/atsc3ctl.py
 
 WORKDIR /opt/atsc3_proto
 

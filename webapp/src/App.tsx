@@ -1,6 +1,12 @@
+import { useState } from "react";
 import EndToEndGaps from "./pages/EndToEndGaps";
+import OperatorConsole from "./pages/OperatorConsole";
+
+type AppPage = "gaps" | "operator";
 
 export default function App() {
+    const [page, setPage] = useState<AppPage>("gaps");
+
     return (
         <div className="app-shell">
             <header className="app-header">
@@ -14,8 +20,26 @@ export default function App() {
                         3.0
                     </span>
                     <span className="app-header__title">seastar-atsc3</span>
-                    <span className="app-header__sub">end-to-end gap analysis</span>
+                    <span className="app-header__sub">
+                        {page === "gaps" ? "end-to-end gap analysis" : "operator console (M7)"}
+                    </span>
                 </a>
+                <nav className="app-header__tabs" aria-label="Primary">
+                    <button
+                        type="button"
+                        className={`app-header__tab${page === "gaps" ? " app-header__tab--active" : ""}`}
+                        onClick={() => setPage("gaps")}
+                    >
+                        Gap analysis
+                    </button>
+                    <button
+                        type="button"
+                        className={`app-header__tab${page === "operator" ? " app-header__tab--active" : ""}`}
+                        onClick={() => setPage("operator")}
+                    >
+                        Operator
+                    </button>
+                </nav>
                 <nav className="app-header__nav">
                     <a
                         href="https://github.com/kporika/seastar-atsc3"
@@ -34,7 +58,7 @@ export default function App() {
                 </nav>
             </header>
             <main className="app-main">
-                <EndToEndGaps />
+                {page === "gaps" ? <EndToEndGaps /> : <OperatorConsole />}
             </main>
             <footer className="app-footer">
                 <span>

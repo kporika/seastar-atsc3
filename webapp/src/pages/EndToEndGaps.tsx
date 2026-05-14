@@ -61,7 +61,7 @@ const STACK: ReadonlyArray<{
 }> = [
     {
         layer: "Operator UI / API",
-        blurb: 'How a human or upstream system says "broadcast this" — HTTP admin stub ships (POST /config/sink, /ingest, /services, …)',
+        blurb: 'How a human or upstream system says "broadcast this" — HTTP admin, tools/atsc3ctl.py, webapp Operator tab (dev proxy to admin)',
         status: "in-flight",
     },
     {
@@ -124,8 +124,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "UI / API",
         spec: "—",
         component: "Web UI (operator dashboard)",
-        status: "missing",
-        notes: "Service list, PLP map, telemetry, push-to-broadcast",
+        status: "in-flight",
+        notes:
+            "Thin Operator tab in webapp (dev: Vite proxy /__atsc3_admin → ATSC3_ADMIN_URL); config/services/metrics/sink; full dashboard (PLP map, telemetry, push-to-broadcast) still missing; static GitHub Pages build has no admin backend",
     },
     {
         layer: "UI / API",
@@ -133,7 +134,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "REST or gRPC control API",
         status: "in-flight",
         notes:
-            "--admin-http: POST /ingest, GET /metrics, GET /config, POST /config/sink + PATCH/PUT /config (body {\"sink_uri\"} only), GET/POST/DELETE /services, GET /healthz /readyz; optional service_id on ingest when set; --services-state-file persists /services; per-service sink routing + TLS still missing",
+            "--admin-http: POST /ingest, GET /metrics, GET /config, POST /config/sink + PATCH/PUT /config (body {\"sink_uri\"} only), GET/POST/DELETE /services, GET /healthz /readyz; optional service_id on ingest when set; --services-state-file persists /services; tools/atsc3ctl.py (stdlib) wraps the same paths; per-service sink routing + TLS + gRPC still missing",
     },
     {
         layer: "UI / API",
@@ -141,7 +142,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "Service config persistence",
         status: "in-flight",
         notes:
-            "Optional --services-state-file JSON for /services (shard 0); full operator YAML/SQLite + schema versioning still missing",
+            "Optional --services-state-file JSON for /services (shard 0); examples/gw.operator.example.json for argv/compose reference; full operator YAML/SQLite + schema versioning still missing",
     },
     {
         layer: "Content",
@@ -399,14 +400,14 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "REST or gRPC API + a service-config YAML schema persisted under /var/lib/atsc3_proto. " +
             "Replaces the current TCP-only ingress with a first-class operator surface: declare a " +
-            "service, attach a content source, push it. Includes a CLI (atsc3ctl) and a thin web UI " +
-            "as the smallest deliverable that an operator can actually use.",
+            "service, attach a content source, push it. Minimal M7 surface shipped: stdlib CLI (atsc3ctl), " +
+            "thin Operator web tab (dev), JSON example for compose; full YAML/SQLite schema, gRPC, and TLS remain future work.",
         unlocks:
-            'A human (or upstream system) can say "broadcast this" (HTTP admin + optional service JSON today; POST /config/sink or PATCH/PUT /config for sink_uri)',
+            'A human (or upstream system) can drive admin HTTP from browser (dev), webapp Operator tab, or tools/atsc3ctl.py; optional service JSON via --services-state-file',
         closes: [
-            "Web UI",
-            "REST/gRPC API (partial: incl. POST /config/sink + PATCH/PUT /config for sink only)",
-            "Service config persistence (partial: --services-state-file)",
+            "Web UI (partial: Operator tab + dev proxy; full dashboard still open)",
+            "REST (partial: admin-http + atsc3ctl; gRPC/TLS/per-service sinks still open)",
+            "Service config persistence (partial: --services-state-file + example JSON)",
         ],
     },
     {
@@ -621,7 +622,7 @@ export default function EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
                         ]}
                     />
                     <BulletGroup

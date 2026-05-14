@@ -1,0 +1,7 @@
+{
+  "comment": "Reference shape for operator automation; atsc3_gw still reads CLI flags — compose argv or use atsc3ctl against --admin-http.",
+  "ingress": "0.0.0.0:9000",
+  "sink_uri": "stdout://",
+  "admin_http": "127.0.0.1:8080",
+  "services_state_file": "/tmp/atsc3_services.json"
+}
