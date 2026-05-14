@@ -112,6 +112,14 @@ public:
     std::uint32_t encoder_lct_tsi() const noexcept {
         return _enc.encoder_config().lct_transport_session_identifier;
     }
+    bool encoder_lct_includes_toi() const noexcept {
+        const auto& e = _enc.encoder_config();
+        return e.prepend_rfc5651_lct_word0 && !e.lct_word0.tsi_flag &&
+               e.lct_word0.toi_flag == 1 && !e.lct_word0.half_word_flag;
+    }
+    std::uint32_t encoder_lct_toi() const noexcept {
+        return _enc.encoder_config().lct_transport_object_identifier;
+    }
 
     // Admin HTTP GET/POST /services — state kept on shard 0 only.
     std::vector<admin_service_entry> list_admin_services() const;

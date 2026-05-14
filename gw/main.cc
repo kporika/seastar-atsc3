@@ -77,7 +77,14 @@ int main(int argc, char** argv) {
          "(header_length_words=2 lab path; no TOI on wire)")
         ("lct-tsi",
          bpo::value<std::uint32_t>()->default_value(0),
-         "when --prepend-lct-word0 and --lct-include-tsi: Transport Session Id");
+         "when --prepend-lct-word0 and --lct-include-tsi: Transport Session Id")
+        ("lct-include-toi",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-lct-word0: append 32-bit BE TOI per RFC5651 O=1 "
+         "(header_length_words=2; mutually exclusive with --lct-include-tsi)")
+        ("lct-toi",
+         bpo::value<std::uint32_t>()->default_value(0),
+         "when --prepend-lct-word0 and --lct-include-toi: Transport Object Id");
 
     return app.run(argc, argv, [&app]() -> seastar::future<int> {
         auto& cfg = app.configuration();
@@ -86,14 +93,24 @@ int main(int argc, char** argv) {
         const std::string services_state = cfg["services-state-file"].as<std::string>();
         const bool prepend_lct = cfg["prepend-lct-word0"].as<bool>();
         const bool lct_include_tsi = cfg["lct-include-tsi"].as<bool>();
+        const bool lct_include_toi = cfg["lct-include-toi"].as<bool>();
         const unsigned cp_in = cfg["lct-codepoint"].as<unsigned>();
         const std::uint32_t lct_tsi = cfg["lct-tsi"].as<std::uint32_t>();
+        const std::uint32_t lct_toi = cfg["lct-toi"].as<std::uint32_t>();
         if (!prepend_lct && cp_in != 0u) {
             mlog.error("--lct-codepoint is only meaningful with --prepend-lct-word0");
             co_return 2;
         }
         if (!prepend_lct && lct_include_tsi) {
             mlog.error("--lct-include-tsi requires --prepend-lct-word0");
+            co_return 2;
+        }
+        if (!prepend_lct && lct_include_toi) {
+            mlog.error("--lct-include-toi requires --prepend-lct-word0");
+            co_return 2;
+        }
+        if (lct_include_tsi && lct_include_toi) {
+            mlog.error("--lct-include-tsi and --lct-include-toi are mutually exclusive");
             co_return 2;
         }
         if (cp_in > std::numeric_limits<std::uint8_t>::max()) {
@@ -105,6 +122,9 @@ int main(int argc, char** argv) {
             if (lct_include_tsi) {
                 enc_cfg = atsc3::gw::with_prepended_lab_lct_word0_tsi(
                     static_cast<std::uint8_t>(cp_in), lct_tsi);
+            } else if (lct_include_toi) {
+                enc_cfg = atsc3::gw::with_prepended_lab_lct_word0_toi(
+                    static_cast<std::uint8_t>(cp_in), lct_toi);
             } else {
                 enc_cfg = atsc3::gw::with_prepended_lab_lct_word0(
                     static_cast<std::uint8_t>(cp_in));
@@ -168,14 +188,19 @@ int main(int argc, char** argv) {
 
         mlog.info(
             "atsc3_gw ready: ingress={} sink={} prepend_lct_word0={} "
-            "lct_codepoint={} lct_include_tsi={} lct_tsi={} admin_http={} "
-            "services_state={} smp={}",
+            "lct_codepoint={} lct_include_tsi={} lct_tsi={} lct_include_toi={} "
+            "lct_toi={} admin_http={} services_state={} smp={}",
             gcfg.ingress_addr,
             gcfg.sink_uri,
             prepend_lct ? "yes" : "no",
             static_cast<unsigned>(gcfg.encoder.lct_word0.codepoint),
             prepend_lct && gcfg.encoder.lct_word0.tsi_flag ? "yes" : "no",
             gcfg.encoder.lct_transport_session_identifier,
+            prepend_lct && !gcfg.encoder.lct_word0.tsi_flag &&
+                    gcfg.encoder.lct_word0.toi_flag == 1
+                ? "yes"
+                : "no",
+            gcfg.encoder.lct_transport_object_identifier,
             admin_bind.empty() ? std::string("(disabled)") : admin_bind,
             gcfg.services_state_file.has_value() ? *gcfg.services_state_file
                                                  : std::string("(none)"),

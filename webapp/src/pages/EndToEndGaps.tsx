@@ -657,7 +657,7 @@ export default function EndToEndGaps() {
                             "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
                             "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
                             "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + RTCM 12×96",
-                            "scripts/lct_word0_integration_test.sh — word-0 then word-0+TSI + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi]",
+                            "scripts/lct_word0_integration_test.sh — A/B/C: word‑0 · TSI · TOI + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi|--expect-lct-toi]",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
                             "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
                             ".github/workflows/ci.yml — eight Docker scripts + RTCM (12×96) like image-integ-all; skips webapp/docs/pages-only diffs; workflow_dispatch",

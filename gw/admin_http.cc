@@ -43,6 +43,8 @@ struct GwHttpAdminConfigSnap {
     std::uint8_t lct_codepoint = 0;
     bool lct_include_tsi = false;
     std::uint32_t lct_tsi = 0;
+    bool lct_include_toi = false;
+    std::uint32_t lct_toi = 0;
 };
 
 inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
@@ -54,6 +56,8 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
     o.lct_codepoint         = s.encoder_lct_codepoint();
     o.lct_include_tsi       = s.encoder_lct_includes_tsi();
     o.lct_tsi               = s.encoder_lct_tsi();
+    o.lct_include_toi       = s.encoder_lct_includes_toi();
+    o.lct_toi               = s.encoder_lct_toi();
     return o;
 }
 
@@ -368,6 +372,10 @@ public:
         w.Bool(snap.lct_include_tsi);
         w.Key("lct_tsi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_tsi));
+        w.Key("lct_include_toi");
+        w.Bool(snap.lct_include_toi);
+        w.Key("lct_toi");
+        w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");
@@ -512,6 +520,10 @@ public:
         w.Bool(snap.lct_include_tsi);
         w.Key("lct_tsi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_tsi));
+        w.Key("lct_include_toi");
+        w.Bool(snap.lct_include_toi);
+        w.Key("lct_toi");
+        w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");

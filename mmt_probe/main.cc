@@ -24,7 +24,8 @@
 //   verify  --file PATH --expected-payloads HEX[,HEX,...]
 //                       [--validate-rtcm]
 //                       [--strip-lct-word0 [--expect-lct-codepoint N]
-//                                            [--expect-lct-tsi U32]]]
+//                                            [--expect-lct-tsi U32]
+//                                            [--expect-lct-toi U32]]]
 //
 //       Walk the gw sink file as TLV-mux packets, decode the inner ALP,
 //       and assert each recovered payload matches expectations. With
@@ -33,8 +34,8 @@
 //
 //       When --strip-lct-word0 is set (gateway was run with
 //       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
-//       opaque body. If word-0 declares a TSI (lab: header_length_words==2),
-//       the next four bytes are a big-endian 32-bit TSI (--expect-lct-tsi).
+//       opaque body. Lab extensions after word‑0: 32-bit TSI (**S** set) or
+//       32-bit TOI (**O**=1, `toi_flag` value 1 — --expect-lct-toi).
 //
 //   rtcm-gen --out PATH --frames N [--msg-type T] [--seed S]
 //                                  [--payload-bytes B]
@@ -182,6 +183,8 @@ struct opts {
     std::optional<std::uint8_t> expect_lct_codepoint;
     /// When set with --strip-lct-word0, compare against the 32-bit TSI peel.
     std::optional<std::uint32_t> expect_lct_tsi;
+    /// When set with --strip-lct-word0, compare against the 32-bit TOI peel (O==1).
+    std::optional<std::uint32_t> expect_lct_toi;
 };
 
 opts parse_args(int argc, char **argv) {
@@ -232,6 +235,9 @@ opts parse_args(int argc, char **argv) {
                 throw std::runtime_error("--expect-lct-tsi out of uint32 range");
             }
             o.expect_lct_tsi = static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-lct-toi") {
+            const auto v = next_uint();
+            o.expect_lct_toi = static_cast<std::uint32_t>(v);
         } else throw std::runtime_error(
             std::string("unknown option: ") + std::string(k));
     }
@@ -428,6 +434,14 @@ int do_verify(const opts &o) {
         std::cerr << "verify: --expect-lct-tsi requires --strip-lct-word0\n";
         return 2;
     }
+    if (o.expect_lct_toi.has_value() && !o.strip_lct_word0) {
+        std::cerr << "verify: --expect-lct-toi requires --strip-lct-word0\n";
+        return 2;
+    }
+    if (o.expect_lct_tsi.has_value() && o.expect_lct_toi.has_value()) {
+        std::cerr << "verify: --expect-lct-tsi and --expect-lct-toi are mutually exclusive\n";
+        return 2;
+    }
     if (o.expected.empty() && !o.validate_rtcm) {
         std::cerr << "verify: --expected-payloads or --validate-rtcm required\n";
         return 2;
@@ -472,14 +486,14 @@ int do_verify(const opts &o) {
             }
 
             std::size_t off = k_lct_word0_bytes;
+            const auto& lv = lctd.value;
 
-            if (!lctd.value.tsi_flag) {
-                if (lctd.value.header_length_words != 1) {
+            if (!lv.tsi_flag && lv.toi_flag == 0) {
+                if (lv.header_length_words != 1) {
                     std::cerr << "verify: TLV #" << idx
                               << " LCT word0-only mode expects "
                                  "header_length_words==1 got "
-                              << static_cast<unsigned>(
-                                     lctd.value.header_length_words)
+                              << static_cast<unsigned>(lv.header_length_words)
                               << "\n";
                     return 1;
                 }
@@ -489,20 +503,23 @@ int do_verify(const opts &o) {
                                  "given\n";
                     return 1;
                 }
-            } else {
-                if (lctd.value.header_length_words != 2 ||
-                    lctd.value.toi_flag != 0 ||
-                    lctd.value.half_word_flag) {
+                if (o.expect_lct_toi.has_value()) {
                     std::cerr << "verify: TLV #" << idx
-                              << " unsupported LCT lab header (want "
-                                 "header_length_words==2 "
-                                 "toi_flag==0 half_word_flag==false)"
-                              << "\n";
+                              << " LCT header omits TOI but --expect-lct-toi "
+                                 "given\n";
+                    return 1;
+                }
+            } else if (lv.tsi_flag && lv.toi_flag == 0 &&
+                       !lv.half_word_flag &&
+                       lv.header_length_words == 2) {
+                if (o.expect_lct_toi.has_value()) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " LCT TSI peel but --expect-lct-toi given\n";
                     return 1;
                 }
                 if (alp_body.size() < off + sizeof(std::uint32_t)) {
                     std::cerr << "verify: TLV #" << idx << " truncated TSI after "
-                                                                  "word0\n";
+                                                                   "word0\n";
                     return 1;
                 }
                 const std::uint32_t got_ts =
@@ -515,6 +532,33 @@ int do_verify(const opts &o) {
                     return 1;
                 }
                 off += sizeof(std::uint32_t);
+            } else if (!lv.tsi_flag && lv.toi_flag == 1 &&
+                       !lv.half_word_flag &&
+                       lv.header_length_words == 2) {
+                if (o.expect_lct_tsi.has_value()) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " LCT TOI peel but --expect-lct-tsi given\n";
+                    return 1;
+                }
+                if (alp_body.size() < off + sizeof(std::uint32_t)) {
+                    std::cerr << "verify: TLV #" << idx << " truncated TOI after "
+                                                                   "word0\n";
+                    return 1;
+                }
+                const std::uint32_t got_toi =
+                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                if (o.expect_lct_toi.has_value() &&
+                    *o.expect_lct_toi != got_toi) {
+                    std::cerr << "verify: TLV #" << idx << " LCT TOI want 0x"
+                              << std::hex << *o.expect_lct_toi << " got 0x"
+                              << got_toi << std::dec << "\n";
+                    return 1;
+                }
+                off += sizeof(std::uint32_t);
+            } else {
+                std::cerr << "verify: TLV #" << idx
+                          << " unsupported LCT lab header for --strip-lct-word0\n";
+                return 1;
             }
 
             if (o.expect_lct_codepoint.has_value() &&

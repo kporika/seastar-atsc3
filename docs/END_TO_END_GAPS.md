@@ -55,7 +55,7 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - TCP length-prefix ingress: `[u32 BE length] [payload]`
 - Per-shard `SO_REUSEPORT` load balancing on the listen socket
 - RTCM v3 frames as a special-case payload via `mmt_probe --rtcm-file`
-- **`--prepend-lct-word0`** (**`--lct-codepoint`**), optional **`--lct-include-tsi --lct-tsi`**: RFC 5651 LCT lab header **inside** ALP ahead of ingress (word‑0 only ⇒ max **2043** user octets **+** **4**‑byte prefix; with TSI BE32 ⇒ max **2039** **+** **8** bytes); **`GET /config`** echoes **`prepend_lct_word0`**, **`lct_codepoint`**, **`lct_include_tsi`**, **`lct_tsi`** **—** ROUTE sessions / FEC still future
+- **`--prepend-lct-word0`** (**`--lct-codepoint`**), optionally either **`--lct-include-tsi --lct-tsi`** or **`--lct-include-toi --lct-toi`** (not both): RFC 5651 LCT lab prefix **inside** ALP (**word‑0** + ≤**8** trailing bytes ⇒ max **2039** / **2043** user like the TSI case); **`GET /config`** echoes **`lct_include_*`** / **`lct_tsi`** / **`lct_toi`**
 - Optional HTTP admin (**`--admin-http host:port`**): **`POST /ingest`**, **`GET /config`**, **`POST /config/sink`** plus **`PATCH` / `PUT` /config** (mutators accept **`sink_uri`** only — hot-swaps **`--sink` on every shard**), **`GET /services`** / **`POST /services`** / **`PATCH /services?id=`** (**`sink_uri`** or **`null`** for per-row HTTP ingest routing) / **`DELETE /services?id=`**, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**; optional **`--admin-bearer-token`** (Bearer auth on **`POST/PATCH/PUT/DELETE`** and **`POST /ingest`**); optional PEM **`--admin-tls-cert`** + **`--admin-tls-key`** (HTTPS listener); optional **`--services-state-file`** — JSON (**`schema_version` 2**) load/save on shard 0 using reactor **`open_file_dma`/`dma_read`** read path and streamed write + **`rename_file`** (**no** `fstream`/`seastar::async` mixing). Thin **Operator** tab in **`webapp/`** (**`npm run dev`**) via Vite **`/__atsc3_admin`** → **`ATSC3_ADMIN_URL`**. **`tools/atsc3ctl.py`**. **`examples/gw.operator.example.json`**.
 
 **What it produces on the wire**
@@ -77,7 +77,7 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - Per-protocol fixture round-trip tests (auto-generated)
 - `tools/smoke/codec_smoke.py` — pure-Python golden checks (27 cases)
 - `scripts/integration_test.sh` — `gw` + `mmt_probe` loopback in 1 process
-- `scripts/lct_word0_integration_test.sh` — `gw` with word‑0 then word‑0+TSI + `mmt_probe verify --strip-lct-word0 [--expect-lct-tsi]` (same hex payloads as `integration_test.sh`)
+- `scripts/lct_word0_integration_test.sh` — **A**/word‑0 · **B**/TSI · **C**/TOI + `mmt_probe verify --strip-lct-word0` / `--expect-lct-{tsi,toi}`
 - `scripts/udp_integration_test.sh` — same payloads through **`udp://`** sink (Python collects UDP payloads)
 - `scripts/ipv4udp_file_integration_test.sh` — **`ipv4udp-file://`** M8 append + **`m8_bin_to_pcap.py --extract-tlvmux`** + `mmt_probe verify`
 - `scripts/stltp_integration_test.sh` — **`stltp://`** lab UDP + **`_stltp_lab_udp_to_tlvmux.py`** strip + `mmt_probe verify`
@@ -145,7 +145,7 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
-| A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first 32-bit LCT header word (codegen + fixtures); gw lab stitch adds word‑0 and optional BE32 **TSI** inside ALP; ALC sessions, TOI/full headers, source/repair, and ATSC ROUTE binding still missing |
+| A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first word (codegen + fixtures); gw lab adds word‑0 and optional BE32 **TSI** (**S**) or BE32 **TOI** (**O**=**1**, `toi_flag`); CCI/ALC sessions, larger **O**/**H**, source/repair, ROUTE binding still missing |
 | A/331 §10          | MMTP packetizer + signaling messages   | MISSING | MMTP header, MFU mode, PA / MPI / MPT messages       |
 | RFC 5053 / 6330    | Raptor10 / RaptorQ FEC                 | MISSING | Required for ROUTE robustness over a one-way link    |
 
@@ -228,10 +228,13 @@ and **`udp://`** / **`ipv4udp-file://`** sinks (not YAML-driven). **LCT**
 starts with **`protocol/lct_rfc5651_word0.yaml`** (first on-wire word only).
 Full **ROUTE/LCT** sessions, **MMTP** payloads on the air interface, and
 **Raptor10/RaptorQ** remain to be built. ALP encapsulation already accepts
-opaque payloads; the gateway can now **prefix** the codegen **LCT word‑0**
-(**`--prepend-lct-word0`**, optional **`--lct-include-tsi`**) as a lab stitch—**TOI**
-and ROUTE object delivery beyond this prefix are still the integration target
-after richer codecs exist.
+opaque payloads; the gateway can **prefix** the codegen **LCT word‑0** with
+**`--prepend-lct-word0`** (**`--lct-codepoint`**) and optionally **`--lct-include-tsi`**
+*or* **`--lct-include-toi`** (lab: skips **CCI**; at most one 32‑bit **TSI** *or*
+**TOI**, the latter encoded as **RFC5651 O**=**1** (`toi_flag` field value **`1`**)).
+Full **CCI**, arbitrary
+**S**/**O**/**H** combos, ALC semantics, ROUTE bindings, and **MMTP** remain the
+integration target after richer codecs exist.
 
 **Unlocks:** Real IP multicast packets ride through ALP+TLV-mux.
 **Closes:** UDP/IPv4 builder (partial: C++ datagram builder + sinks) · ROUTE/LCT packetizer (partial: LCT header word-0 YAML) · MMTP packetizer · Raptor10/RaptorQ FEC.
@@ -306,7 +309,7 @@ them can act as the downstream peer once M10 lands.
 
 ### Smallest input surface
 
-**Implemented (optional):** pass **`--admin-http host:port`** to **`atsc3_gw`**. The gateway serves **`POST /ingest`**, **`GET /config`**, **`POST /config/sink`**, **`PATCH` / `PUT` /config** (mutating bodies are **`{"sink_uri":"…"}`** only—global hot-swap), **`GET`** / **`POST`** / **`PATCH`** / **`DELETE /services`**, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**. Optional **`--admin-bearer-token`**, **`--admin-tls-cert`** + **`--admin-tls-key`** (**HTTPS** listener), **`--services-state-file`** (JSON **`schema_version` 2**, shard 0), and (**M8**) **`--prepend-lct-word0`** with **`--lct-codepoint`** and optional **`--lct-include-tsi --lct-tsi`** (RFC 5651 word‑0 + optional BE32 **TSI** inside ALP; max **2039** / **2043** user octets). **`POST /ingest`** JSON envelope:
+**Implemented (optional):** pass **`--admin-http host:port`** to **`atsc3_gw`**. The gateway serves **`POST /ingest`**, **`GET /config`**, **`POST /config/sink`**, **`PATCH` / `PUT` /config** (mutating bodies are **`{"sink_uri":"…"}`** only—global hot-swap), **`GET`** / **`POST`** / **`PATCH`** / **`DELETE /services`**, **`GET /healthz`**, **`GET /readyz`**, **`GET /metrics`**. Optional **`--admin-bearer-token`**, **`--admin-tls-cert`** + **`--admin-tls-key`** (**HTTPS** listener), **`--services-state-file`** (JSON **`schema_version` 2**, shard 0), and (**M8**) **`--prepend-lct-word0`** (**`--lct-codepoint`**) with optional **`--lct-include-tsi --lct-tsi`** **or** **`--lct-include-toi --lct-toi`** (mutually exclusive; RFC 5651 word‑0 plus one BE32 **TSI** or **TOI** (**O**=**1** inside `toi_flag`) inside ALP; max **2039** / **2043** user octets). **`POST /ingest`** JSON envelope:
 
 ```json
 { "service_id": 1, "type": "rtcm" | "raw" | "lls", "payload_b64": "..." }

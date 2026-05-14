@@ -34,21 +34,28 @@ encoder_pipeline::result encoder_pipeline::encode(
     std::span<const std::byte> alp_body = payload;
     if (_cfg.prepend_rfc5651_lct_word0) {
         const auto& w = _cfg.lct_word0;
-        if (!w.tsi_flag) {
+        enum class lab_prefix_mode { none, tsi_word32, toi_o1_word32 };
+
+        lab_prefix_mode mode;
+        if (!w.tsi_flag && w.toi_flag == 0) {
             if (w.header_length_words != 1) {
                 r.error =
                     "encoder_pipeline: LCT lab (word‑0 only) requires "
                     "header_length_words==1";
                 return r;
             }
+            mode = lab_prefix_mode::none;
+        } else if (w.tsi_flag && w.toi_flag == 0 && !w.half_word_flag &&
+                   w.header_length_words == 2) {
+            mode = lab_prefix_mode::tsi_word32;
+        } else if (!w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
+                   w.header_length_words == 2) {
+            mode = lab_prefix_mode::toi_o1_word32;
         } else {
-            if (w.header_length_words != 2 || w.toi_flag != 0 ||
-                w.half_word_flag) {
-                r.error =
-                    "encoder_pipeline: LCT+32-bit TSI lab requires "
-                    "header_length_words==2, toi_flag==0, half_word_flag=false";
-                return r;
-            }
+            r.error =
+                "encoder_pipeline: unsupported LCT lab prefix (supports word‑0; "
+                "word‑0+32b TSI; word‑0+32b TOI with O==1)";
+            return r;
         }
 
         auto lct = atsc3::lct_rfc5651_word0::encode(w);
@@ -57,13 +64,14 @@ encoder_pipeline::result encoder_pipeline::encode(
             return r;
         }
 
-        prefixed.reserve(lct.bytes.size() +
-                             (w.tsi_flag ? sizeof(std::uint32_t)
-                                         : std::size_t{}) +
-                         payload.size());
+        const std::size_t extra =
+            (mode == lab_prefix_mode::none) ? 0 : sizeof(std::uint32_t);
+        prefixed.reserve(lct.bytes.size() + extra + payload.size());
         prefixed.insert(prefixed.end(), lct.bytes.begin(), lct.bytes.end());
-        if (w.tsi_flag) {
+        if (mode == lab_prefix_mode::tsi_word32) {
             append_u32_be(&prefixed, _cfg.lct_transport_session_identifier);
+        } else if (mode == lab_prefix_mode::toi_o1_word32) {
+            append_u32_be(&prefixed, _cfg.lct_transport_object_identifier);
         }
         prefixed.insert(prefixed.end(), payload.begin(), payload.end());
         alp_body = prefixed;

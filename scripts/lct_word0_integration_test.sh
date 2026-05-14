@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Integration: (A) gw --prepend-lct-word0 + codepoint-only; (B) same plus
-# --lct-include-tsi + --lct-tsi — same hex payloads as integration_test.sh.
-# mmt_probe verify peels word‑0 (--strip-lct-word0) and optional TSI.
+# Integration: (A) word-0 only; (B) + TSI BE32; (C) + TOI (**RFC5651 O**=1).
 #
 # Usage:
 #   scripts/lct_word0_integration_test.sh [BUILD_DIR]
@@ -21,6 +19,7 @@ probe_bin="$(resolve_bin "${MMT_PROBE:-}" "${build_dir}/mmt_probe/mmt_probe" mmt
 
 lct_cp=91
 lct_tsi=60221
+lct_toi=44103
 
 echo "[lct_word0_integ] gw=${gw_bin}"
 echo "[lct_word0_integ] probe=${probe_bin}"
@@ -95,6 +94,7 @@ run_phase() {
 
 port_a=$(( ( RANDOM % 10000 ) + 29000 ))
 port_b=$(( ( RANDOM % 10000 ) + 39000 ))
+port_c=$(( ( RANDOM % 10000 ) + 49000 ))
 
 echo "[lct_word0_integ] phase A: word-0 only (codepoint=${lct_cp})"
 run_phase "A" "${port_a}" "${tmpdir}/a.out" "${tmpdir}/gw_a.log"
@@ -112,6 +112,16 @@ run_phase "B" "${port_b}" "${tmpdir}/b.out" "${tmpdir}/gw_b.log" \
     --strip-lct-word0 \
     --expect-lct-codepoint "${lct_cp}" \
     --expect-lct-tsi "${lct_tsi}" \
+    --expected-payloads "${payloads}"
+
+echo "[lct_word0_integ] phase C: word-0 + 32-bit TOI O=1 (${lct_toi})"
+run_phase "C" "${port_c}" "${tmpdir}/c.out" "${tmpdir}/gw_c.log" \
+    --lct-include-toi --lct-toi "${lct_toi}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/c.out.shard0" \
+    --strip-lct-word0 \
+    --expect-lct-codepoint "${lct_cp}" \
+    --expect-lct-toi "${lct_toi}" \
     --expected-payloads "${payloads}"
 
 echo "[lct_word0_integ] PASS"
