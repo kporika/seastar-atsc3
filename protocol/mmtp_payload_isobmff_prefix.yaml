@@ -1,0 +1,54 @@
+# MMTP — first 64 bits of the **payload header for ISOBMFF mode** (Figure 3,
+# rows 1–2). Applies when **payload_type** in `mmtp_header_word0` is **0x00**
+# (ISOBMFF mode per MPEG-MMT / ISO/IEC 23008-1 MMTP).
+#
+# **length** (16b): length in bytes of the MMTP payload **excluding** this
+# 16-bit field (normative text in the MMTP payload clause). **FT** (4b),
+# **T** (1b), **f_i** (2b), **A** (1b), **frag_counter** (8b), then
+# **sequence_number** (32b).
+#
+# Follow-on slices (not in this YAML): when **A**=**1**, **DU_length** (16b)
+# repeats per aggregated data unit; **DU_Header** depends on **FT** (Figures
+# 4–5 for media units); **FT** 0–1 carry no DU header — opaque box data follows.
+
+protocol:
+  name: mmtp_payload_isobmff_prefix
+  proto_id: 11
+  spec: "ISO/IEC 23008-1 (MMTP ISOBMFF-mode payload header)"
+  description: "MMTP ISOBMFF payload — length + FT/T/f_i/A/frag_counter + sequence_number"
+
+header:
+  total_bits: 64
+  fields:
+    - { name: payload_length_excluding_length_field, bit_offset: 0, bit_width: 16, type: uint }
+    - { name: fragment_type, bit_offset: 16, bit_width: 4, type: uint }
+    - { name: timed_flag, bit_offset: 20, bit_width: 1, type: bool }
+    - { name: fragmentation_indicator, bit_offset: 21, bit_width: 2, type: uint }
+    - { name: aggregation_flag, bit_offset: 23, bit_width: 1, type: bool }
+    - { name: fragment_counter, bit_offset: 24, bit_width: 8, type: uint }
+    - { name: sequence_number, bit_offset: 32, bit_width: 32, type: uint }
+
+fixtures:
+  - name: media_unit_single_du
+    description: "length=100, FT=2 (data unit), T=1, f_i=00, A=0, frag=0, seq=0x11223344 → 00 64 28 00 11 22 33 44"
+    raw_hex: "00 64 28 00 11 22 33 44"
+    expected:
+      payload_length_excluding_length_field: 100
+      fragment_type: 2
+      timed_flag: true
+      fragmentation_indicator: 0
+      aggregation_flag: false
+      fragment_counter: 0
+      sequence_number: 287454020
+
+  - name: metadata_ft0
+    description: "length=8, FT=0 (ISOBMFF metadata), T=0, f_i=00, A=0, frag=0, seq=1 → 00 08 00 00 00 00 00 01"
+    raw_hex: "00 08 00 00 00 00 00 01"
+    expected:
+      payload_length_excluding_length_field: 8
+      fragment_type: 0
+      timed_flag: false
+      fragmentation_indicator: 0
+      aggregation_flag: false
+      fragment_counter: 0
+      sequence_number: 1

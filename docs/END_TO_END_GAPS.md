@@ -69,13 +69,13 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - MSB-first bit reader/writer in `lib/runtime/`
 
 **M8 / M9 (lab transport & LLS helpers)**
-- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 first LCT header word (codegen); gateway **`--prepend-lct-word0`** prefixes that word (**optional** **`--lct-include-tsi`**, **`--lct-include-toi`**, or **both**) inside ALP (lab stitch). **MMTP header (codegen):** **`mmtp_header_word0.yaml`**, **`mmtp_header_ts_psn.yaml`**, **`mmtp_header_counter32.yaml`**, **`mmtp_header_extension.yaml`** (one **X** TLV per decode; repeat for chains); MFU / PA / MPI / MPT **payload** bodies, multi-extension **assembly**, **`gw`** MMTP prefix, and full depacketizer not wired yet; ROUTE sessions / FEC not in **`atsc3_gw`** yet
+- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 first LCT header word (codegen); gateway **`--prepend-lct-word0`** prefixes that word (**optional** **`--lct-include-tsi`**, **`--lct-include-toi`**, or **both**) inside ALP (lab stitch). **MMTP header (codegen):** **`mmtp_header_word0.yaml`**, **`mmtp_header_ts_psn.yaml`**, **`mmtp_header_counter32.yaml`**, **`mmtp_header_extension.yaml`** (one **X** TLV per decode; repeat for chains); **ISOBMFF-mode payload prefix:** **`mmtp_payload_isobmff_prefix.yaml`** (first 64b of payload header — **DU_length** / **DU_Header** / opaque media still open); MFU / PA / MPI / MPT bodies, signalling-mode payload header, multi-extension **assembly**, **`gw`** MMTP prefix, and full depacketizer not wired yet; ROUTE sessions / FEC not in **`atsc3_gw`** yet
 - `lib/runtime/lls_table6_1.hh` — **M9** A/331 Table 6.1 four-byte LLS prefix helper (matches `gw/sink.cc`)
 - `tools/m9_lls_pack.py` + `fixtures/lls/minimal_slt.xml` — **M9** lab: cleartext XML → prefix + gzip (RFC 1952) for bench / `lls://` ingest
 
 **Test harness**
 - Per-protocol fixture round-trip tests (auto-generated)
-- `tools/smoke/codec_smoke.py` — pure-Python golden checks (35 cases)
+- `tools/smoke/codec_smoke.py` — pure-Python golden checks (37 cases)
 - `scripts/integration_test.sh` — `gw` + `mmt_probe` loopback in 1 process
 - `scripts/lct_word0_integration_test.sh` — **A**/word‑0 · **B**/TSI · **C**/TOI · **D**/TSI+TOI + `mmt_probe verify --strip-lct-word0` / `--expect-lct-{tsi,toi}`
 - `scripts/udp_integration_test.sh` — same payloads through **`udp://`** sink (Python collects UDP payloads)
@@ -146,14 +146,14 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
 | A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first word (codegen + fixtures); gw lab adds word‑0 and optional BE32 **TSI** (**S**) and/or BE32 **TOI** (**O**=**1**, `toi_flag`); CCI/ALC sessions, larger **O**/**H**, source/repair, ROUTE binding still missing |
-| A/331 §10          | MMTP packetizer + signaling messages   | PARTIAL | **`mmtp_desc`** / **`mmtp_desc_loop`** (**Annex A.5** TLVs); **MMTP packet header (codegen):** **`mmtp_header_word0`**, **`mmtp_header_ts_psn`**, **`mmtp_header_counter32`**, **`mmtp_header_extension`** (type+length+opaque; one unit per YAML — repeat for **X** chains); MFU / PA / MPI / MPT **payload** headers + bodies, multi-extension assembly, **`gw`** MMTP prefix — still missing |
+| A/331 §10          | MMTP packetizer + signaling messages   | PARTIAL | **`mmtp_desc`** / **`mmtp_desc_loop`** (**Annex A.5** TLVs); **MMTP packet header (codegen):** **`mmtp_header_word0`**, **`mmtp_header_ts_psn`**, **`mmtp_header_counter32`**, **`mmtp_header_extension`** (type+length+opaque; one unit per YAML — repeat for **X** chains); **ISOBMFF payload prefix:** **`mmtp_payload_isobmff_prefix`** (Figure 3 rows 1–2 only); signalling payload header, MFU / PA / MPI / MPT bodies, **DU** headers, multi-extension assembly, **`gw`** MMTP prefix — still missing |
 | RFC 5053 / 6330    | Raptor10 / RaptorQ FEC                 | MISSING | Required for ROUTE robustness over a one-way link    |
 
 ### Network
 
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
-| RFC 768 + RFC 791  | UDP / IPv4 builder + checksums         | PARTIAL | `lib/runtime/ipv4_udp.{hh,cc}` — `encapsulate_ipv4_udp`; **`ipv4udp-file://`** sink appends full datagrams; **`udp://`** lab send (kernel IP/UDP); **`lct_rfc5651_word0`** + **`--prepend-lct-word0`** (optional **`--lct-include-tsi`**, **`--lct-include-toi`**) lab prefix inside ALP; full ROUTE/ALC/MMTP wire not in **`gw`** yet |
+| RFC 768 + RFC 791  | UDP / IPv4 builder + checksums         | PARTIAL | `lib/runtime/ipv4_udp.{hh,cc}` — `encapsulate_ipv4_udp`; **`ipv4udp-file://`** sink appends full datagrams; **`udp://`** lab send (kernel IP/UDP); **`lct_rfc5651_word0`** + **`--prepend-lct-word0`** (optional **`--lct-include-tsi`**, **`--lct-include-toi`**) lab prefix inside ALP; **MMTP** header + **`mmtp_payload_isobmff_prefix`** in codegen only — full ROUTE/ALC/MMTP wire not in **`gw`** yet |
 
 ### Link (this is the part `atsc3_proto` already owns)
 
@@ -232,7 +232,7 @@ opaque payloads; the gateway can **prefix** the codegen **LCT word‑0** with
 **`--prepend-lct-word0`** (**`--lct-codepoint`**) and optional **`--lct-include-tsi`**
 (and/or **`--lct-include-toi`**) (lab: skips **CCI**; **TSI**/ **TOI** (**O**=**1**) as 32‑bit BE fields in **RFC** order after word‑0, **header_length_words** = **2–3**). Full **CCI**, arbitrary larger
 **S**/**O**/**H** combos, ALC semantics, ROUTE bindings, and **MMTP** beyond the first header word remain the
-integration target. **Next transport slice:** MMTP **payload-type** headers (ISOBMFF mode, signalling mode, etc. per **payload_type** in word‑0), then optional **`gw`** lab prefix like **LCT**.
+integration target. **Next transport slice:** MMTP **payload** continuation — **DU_length** / **DU_Header** (Figures 4–5) and opaque body for ISOBMFF mode; **signalling** payload header for **payload_type** **0x02**; then optional **`gw`** lab prefix like **LCT**.
 
 **Unlocks:** Real IP multicast packets ride through ALP+TLV-mux.
 **Closes:** UDP/IPv4 builder (partial: C++ datagram builder + sinks) · ROUTE/LCT packetizer (partial: LCT header word-0 YAML + gw prepend) · MMTP packetizer (partial: **`mmtp_header_*`** + **`mmtp_desc`**) · Raptor10/RaptorQ FEC.
