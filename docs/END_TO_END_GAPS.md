@@ -68,13 +68,13 @@ Closing **every** row below is **multi-year** engineering (roughly milestones **
 - MSB-first bit reader/writer in `lib/runtime/`
 
 **M8 / M9 (lab transport & LLS helpers)**
-- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). No ROUTE/LCT/MMTP yet
+- `lib/runtime/ipv4_udp.{hh,cc}` — **M8** IPv4 + UDP encapsulation with IPv4/UDP checksums (`encapsulate_ipv4_udp`); used by **`ipv4udp-file://`** sink in `gw/sink.cc` (append wire to file); **`udp://`** uses kernel UDP (no user-space IP header). **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 first LCT header word (codegen only); ROUTE/ALC/MMTP not wired into the gateway yet
 - `lib/runtime/lls_table6_1.hh` — **M9** A/331 Table 6.1 four-byte LLS prefix helper (matches `gw/sink.cc`)
 - `tools/m9_lls_pack.py` + `fixtures/lls/minimal_slt.xml` — **M9** lab: cleartext XML → prefix + gzip (RFC 1952) for bench / `lls://` ingest
 
 **Test harness**
 - Per-protocol fixture round-trip tests (auto-generated)
-- `tools/smoke/codec_smoke.py` — pure-Python golden checks (25 cases)
+- `tools/smoke/codec_smoke.py` — pure-Python golden checks (27 cases)
 - `scripts/integration_test.sh` — `gw` + `mmt_probe` loopback in 1 process
 - `scripts/udp_integration_test.sh` — same payloads through **`udp://`** sink (Python collects UDP payloads)
 - `scripts/ipv4udp_file_integration_test.sh` — **`ipv4udp-file://`** M8 append + **`m8_bin_to_pcap.py --extract-tlvmux`** + `mmt_probe verify`
@@ -98,7 +98,7 @@ out of scope for `atsc3_proto`.
 | 01 | Operator UI / API                    | How a human or upstream system says "broadcast this"                                          | PARTIAL  |
 | 02 | Content packaging                    | DASH segmenter, MMT packager, NRT file ingest, live RTMP/SRT/RTP                              | MISSING  |
 | 03 | Service-layer signaling              | LLS (SLT, SystemTime, AEAT) + SLS (USBD, S-TSID, MPD, HELD)                                   | MISSING  |
-| 04 | Transport                            | ROUTE/LCT for DASH, MMTP for MMT, Raptor10/RaptorQ FEC                                        | MISSING  |
+| 04 | Transport                            | ROUTE/LCT for DASH, MMTP for MMT, Raptor10/RaptorQ FEC                                        | PARTIAL  |
 | 05 | Network (UDP/IP)                     | Multicast IP packet building per service / signaling flow                                     | PARTIAL  |
 | 06 | Link layer (ALP + TLV-mux)           | ATSC A/330 — single packet_type, opaque payload, no segmentation                              | PARTIAL  |
 | 07 | Gateway → Exciter (A/324)            | BBP framing, PLP scheduler, L1B/L1D, STLTP UDP, SFN time sync                                 | MISSING  |
@@ -142,7 +142,7 @@ Every concrete component with its ATSC / IETF spec citation and current status.
 
 | Spec               | Component                              | Status  | Notes                                                |
 |--------------------|----------------------------------------|---------|------------------------------------------------------|
-| A/331 §A.3         | ROUTE / LCT packetizer                 | MISSING | RFC 5651 LCT + ALC sessions, source flow + repair flow |
+| A/331 §A.3         | ROUTE / LCT packetizer                 | PARTIAL | **`protocol/lct_rfc5651_word0.yaml`** — RFC 5651 §5.1 first 32-bit LCT header word (codegen + fixtures); ALC session setup, source/repair flows, and ATSC ROUTE binding still missing |
 | A/331 §10          | MMTP packetizer + signaling messages   | MISSING | MMTP header, MFU mode, PA / MPI / MPT messages       |
 | RFC 5053 / 6330    | Raptor10 / RaptorQ FEC                 | MISSING | Required for ROUTE robustness over a one-way link    |
 
@@ -216,13 +216,16 @@ production-grade dashboard remain future work.
 ### M8 — Network + transport (UDP/IP, ROUTE/LCT, MMTP)
 
 Move from opaque length-framed payloads to real broadcast-shaped traffic.
-UDP/IPv4 builder (another codegen YAML), then ROUTE/LCT for DASH delivery
-and MMTP for MMT delivery. ALP encapsulation already in place picks up real
-IP packets instead of opaque blobs. Adds Raptor10/RaptorQ FEC for the
-one-way path.
+**UDP/IPv4** is already exercised in C++ via **`lib/runtime/ipv4_udp.{hh,cc}`**
+and **`udp://`** / **`ipv4udp-file://`** sinks (not YAML-driven). **LCT**
+starts with **`protocol/lct_rfc5651_word0.yaml`** (first on-wire word only).
+Full **ROUTE/LCT** sessions, **MMTP** payloads on the air interface, and
+**Raptor10/RaptorQ** remain to be built. ALP encapsulation already accepts
+opaque payloads; wiring real ROUTE packets through the gateway is the next
+integration step after the codecs exist.
 
 **Unlocks:** Real IP multicast packets ride through ALP+TLV-mux.
-**Closes:** UDP/IPv4 builder · ROUTE/LCT packetizer · MMTP packetizer · Raptor10/RaptorQ FEC.
+**Closes:** UDP/IPv4 builder (partial: C++ datagram builder + sinks) · ROUTE/LCT packetizer (partial: LCT header word-0 YAML) · MMTP packetizer · Raptor10/RaptorQ FEC.
 
 ### M9 — Service-layer signaling
 

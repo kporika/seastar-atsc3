@@ -76,8 +76,8 @@ const STACK: ReadonlyArray<{
     },
     {
         layer: "Transport",
-        blurb: "ROUTE/LCT for DASH, MMTP for MMT, Raptor10/RaptorQ FEC",
-        status: "missing",
+        blurb: "ROUTE/LCT for DASH, MMTP for MMT, Raptor10/RaptorQ FEC — LCT header word-0 YAML landed",
+        status: "in-flight",
     },
     {
         layer: "Network (UDP/IP)",
@@ -216,8 +216,9 @@ const GAPS: ReadonlyArray<GapRow> = [
         layer: "Transport",
         spec: "A/331 §A.3",
         component: "ROUTE / LCT packetizer",
-        status: "missing",
-        notes: "RFC 5651 LCT + ALC sessions, source flow + repair flow",
+        status: "in-flight",
+        notes:
+            "protocol/lct_rfc5651_word0.yaml — RFC 5651 first 32-bit LCT header word (codegen + fixtures); full ALC/ROUTE sessions + source/repair flows still missing",
     },
     {
         layer: "Transport",
@@ -240,7 +241,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ROUTE/LCT/MMTP not implemented",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; protocol/lct_rfc5651_word0.yaml (LCT first word); full ROUTE/ALC/MMTP not in gw yet",
     },
     // --- link (this is us) ---
     {
@@ -424,14 +425,15 @@ const ROADMAP: ReadonlyArray<{
         id: "M8",
         title: "Network + transport (UDP/IP, ROUTE/LCT, MMTP)",
         blurb:
-            "Move from opaque length-framed payloads to real broadcast-shaped traffic. UDP/IPv4 builder " +
-            "(another codegen YAML), then ROUTE/LCT for DASH delivery and MMTP for MMT delivery. " +
-            "ALP encapsulation already in place picks up real IP packets instead of opaque blobs. " +
-            "Adds Raptor10/RaptorQ FEC for the one-way path.",
+            "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
+            "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
+            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word). " +
+            "Full ROUTE/LCT sessions, MMTP payloads, and Raptor10/RaptorQ FEC remain. " +
+            "ALP encapsulation already accepts opaque payloads.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
-            "UDP/IPv4 builder",
-            "ROUTE/LCT packetizer",
+            "UDP/IPv4 builder (partial: C++ + sinks)",
+            "ROUTE/LCT packetizer (partial: LCT header word-0 YAML)",
             "MMTP packetizer",
             "Raptor10/RaptorQ FEC",
         ],
@@ -626,7 +628,7 @@ export default function Atsc3EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -634,7 +636,7 @@ export default function Atsc3EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (25 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (27 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",

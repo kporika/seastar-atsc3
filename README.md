@@ -37,6 +37,7 @@ atsc3_proto/
 │   ├── alp.yaml               #   ATSC A/330 §5.2 — ALP base header
 │   ├── tlv_mux.yaml           #   ATSC A/330 Annex A — TLV multiplex packet
 │   ├── tlv_mux_frame.yaml     #   wrapper: N tlv_mux packets (M6 example)
+│   ├── lct_rfc5651_word0.yaml #   RFC 5651 §5.1 — LCT header first 32 bits (M8 slice)
 │   ├── mmtp_desc.yaml         #   ATSC A/331 Annex A.5 — MMTP descriptor
 │   └── mmtp_desc_loop.yaml    #   length-prefixed loop of mmtp_desc (M6 example)
 ├── tools/
@@ -212,7 +213,7 @@ python3 -m pip install -r tools/requirements.txt
 
 ## M8 / M9 lab helpers
 
-- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). No ROUTE/LCT/MMTP yet.
+- **M8:** `lib/runtime/ipv4_udp.{hh,cc}` builds a full **IPv4 + UDP** datagram (20+8+payload bytes) with **header checksums** (`encapsulate_ipv4_udp`, `ipv4_quad`). Unit test: `tests/udp_ipv4_test.cc`. **`ipv4udp-file://`** sink in `gw/sink.cc` appends each TLV-mux frame as one M8 datagram (query: `src`, `dst`, `srcport`, `dstport`, optional `ttl`). **`udp://host:port`** sends TLV-mux as plain UDP (kernel IP/UDP). **`protocol/lct_rfc5651_word0.yaml`** is the first **RFC 5651** LCT header word in the YAML/codegen path (not wired into the gateway yet); full ROUTE/ALC/MMTP remains future work.
 - **M9:** `lib/runtime/lls_table6_1.hh` matches the **A/331 Table 6.1** four-byte prefix used by `lls://`. **`tools/m9_lls_pack.py`** reads cleartext XML (e.g. `fixtures/lls/minimal_slt.xml`) and writes **prefix + gzip** to stdout for piping into `lls://` or `POST /ingest` (base64-wrap as needed).
 
 ```bash

@@ -1,0 +1,63 @@
+# RFC 5651 LCT — first 32-bit word of the default LCT header (Figure 1, §5.1).
+# Spec: RFC 5651 Layered Coding Transport, October 2009.
+#
+# This is intentionally **only** the fixed first word on the wire. CCI, TSI,
+# TOI, and header extensions are variable-length and are modeled separately
+# when ROUTE/ALC integration lands.
+#
+# Bit ordering matches the repo convention (MSB-first within each octet;
+# bit_offset 0 == MSB of byte 0), which is network byte order for this word.
+
+protocol:
+  name: lct_rfc5651_word0
+  proto_id: 6
+  spec: "RFC 5651 §5.1"
+  description: "LCT default header — first 32 bits (V, C, PSI, S, O, H, Res, A, B, HDR_LEN, CP)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: lct_version, bit_offset: 0, bit_width: 4, type: uint }
+    - { name: congestion_flag_c, bit_offset: 4, bit_width: 2, type: uint }
+    - { name: protocol_specific_indication, bit_offset: 6, bit_width: 2, type: uint }
+    - { name: tsi_flag, bit_offset: 8, bit_width: 1, type: bool }
+    - { name: toi_flag, bit_offset: 9, bit_width: 2, type: uint }
+    - { name: half_word_flag, bit_offset: 11, bit_width: 1, type: bool }
+    - { name: reserved_two, bit_offset: 12, bit_width: 2, type: uint }
+    - { name: close_session, bit_offset: 14, bit_width: 1, type: bool }
+    - { name: close_object, bit_offset: 15, bit_width: 1, type: bool }
+    - { name: header_length_words, bit_offset: 16, bit_width: 8, type: uint }
+    - { name: codepoint, bit_offset: 24, bit_width: 8, type: uint }
+
+fixtures:
+  - name: minimal_v1_c0
+    description: "V=1, C=0, PSI=0, S=0, O=0, H=0, Res=0, A=0, B=0, HDR_LEN=1, CP=0 → 10 00 01 00"
+    raw_hex: "10 00 01 00"
+    expected:
+      lct_version: 1
+      congestion_flag_c: 0
+      protocol_specific_indication: 0
+      tsi_flag: false
+      toi_flag: 0
+      half_word_flag: false
+      reserved_two: 0
+      close_session: false
+      close_object: false
+      header_length_words: 1
+      codepoint: 0
+
+  - name: routeish_cp42
+    description: "Same flags as minimal but codepoint 42 (opaque session mapping)"
+    raw_hex: "10 00 01 2A"
+    expected:
+      lct_version: 1
+      congestion_flag_c: 0
+      protocol_specific_indication: 0
+      tsi_flag: false
+      toi_flag: 0
+      half_word_flag: false
+      reserved_two: 0
+      close_session: false
+      close_object: false
+      header_length_words: 1
+      codepoint: 42
