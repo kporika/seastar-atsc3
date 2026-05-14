@@ -12,7 +12,9 @@
 # **`mmtp_header_counter32.yaml`** (present when **C**=**1**),
 # **`mmtp_header_extension.yaml`** (one **X** block: type + length + value; repeat on wire for multiple extensions).
 # When **payload_type** is **0x00** (ISOBMFF mode), the MMTP **payload** begins
-# with **`mmtp_payload_isobmff_prefix.yaml`** (length + FT/T/f_i/A/frag_counter + sequence_number); other **payload_type** values use different payload headers (future YAML).
+# with **`mmtp_payload_isobmff_prefix.yaml`**, then optional **DU** headers
+# (**`mmtp_payload_isobmff_du_header_{timed,non_timed}.yaml`** when **FT**=**2**).
+# Other **payload_type** values use different payload headers (future YAML).
 #
 # Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
 

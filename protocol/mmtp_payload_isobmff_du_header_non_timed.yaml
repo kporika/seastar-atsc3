@@ -1,0 +1,24 @@
+# MMTP — **DU header for a non-timed media data unit** (ISO/IEC 23008-1 MMTP
+# ISOBMFF-mode payload, Figure 5). Present when **fragment_type** is **2** and
+# **timed_flag** is **false**. Precedes opaque item payload (and optional
+# **DU_length** when **aggregation_flag** is **1** — not modeled here).
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_payload_isobmff_du_header_non_timed
+  proto_id: 13
+  spec: "ISO/IEC 23008-1 (MMTP ISOBMFF-mode DU header, non-timed)"
+  description: "MMTP ISOBMFF — non-timed DU header (item_ID)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: item_id, bit_offset: 0, bit_width: 32, type: uint }
+
+fixtures:
+  - name: item_deadbeef
+    description: "item_ID = 0xDEADBEEF"
+    raw_hex: "DE AD BE EF"
+    expected:
+      item_id: 3735928559
