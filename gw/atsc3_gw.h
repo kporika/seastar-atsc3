@@ -131,6 +131,102 @@ public:
     std::uint16_t encoder_mmtp_packet_id() const noexcept {
         return _enc.encoder_config().mmtp_word0.packet_id;
     }
+    bool encoder_prepends_mmtp_ts_psn() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_ts_psn;
+    }
+    std::uint32_t encoder_mmtp_timestamp() const noexcept {
+        return _enc.encoder_config().mmtp_ts_psn.timestamp;
+    }
+    std::uint32_t encoder_mmtp_psn() const noexcept {
+        return _enc.encoder_config().mmtp_ts_psn.packet_sequence_number;
+    }
+    bool encoder_prepends_mmtp_packet_counter() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_packet_counter;
+    }
+    std::uint32_t encoder_mmtp_packet_counter() const noexcept {
+        return _enc.encoder_config().mmtp_packet_counter;
+    }
+    bool encoder_prepends_mmtp_extension() const noexcept {
+        return !_enc.encoder_config().mmtp_extensions.empty();
+    }
+    /// Ordered MMTP **X** TLVs (empty when none).
+    const std::vector<mmtp_extension_tlv>& encoder_mmtp_extensions() const noexcept {
+        return _enc.encoder_config().mmtp_extensions;
+    }
+    bool encoder_prepends_mmtp_signalling_prefix() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_signalling_prefix;
+    }
+    std::uint8_t encoder_mmtp_signalling_fragmentation() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_prefix.fragmentation_indicator;
+    }
+    std::uint8_t encoder_mmtp_signalling_reserved() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_prefix.reserved;
+    }
+    bool encoder_mmtp_signalling_length_extension() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_prefix.length_extension_flag;
+    }
+    bool encoder_mmtp_signalling_aggregation() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_prefix.aggregation_flag;
+    }
+    std::uint8_t encoder_mmtp_signalling_fragment_counter() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_prefix.fragment_counter;
+    }
+    /// Bodies appended after the signalling prefix when **aggregation_flag** is set (lab).
+    const std::vector<std::vector<std::byte>>&
+    encoder_mmtp_signalling_aggregate_bodies() const noexcept {
+        return _enc.encoder_config().mmtp_signalling_aggregate_bodies;
+    }
+
+    bool encoder_prepends_mmtp_isobmff_prefix() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_isobmff_prefix;
+    }
+    std::uint8_t encoder_mmtp_isobmff_fragment_type() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.fragment_type;
+    }
+    bool encoder_mmtp_isobmff_timed_flag() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.timed_flag;
+    }
+    std::uint8_t encoder_mmtp_isobmff_fragmentation_indicator() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.fragmentation_indicator;
+    }
+    bool encoder_mmtp_isobmff_aggregation_flag() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.aggregation_flag;
+    }
+    std::uint8_t encoder_mmtp_isobmff_fragment_counter() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.fragment_counter;
+    }
+    std::uint32_t encoder_mmtp_isobmff_sequence_number() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_prefix.sequence_number;
+    }
+    /// Bodies appended after the ISOBMFF payload prefix when **aggregation_flag** is set (lab).
+    const std::vector<std::vector<std::byte>>&
+    encoder_mmtp_isobmff_aggregate_bodies() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_aggregate_bodies;
+    }
+
+    bool encoder_prepends_mmtp_isobmff_du_header() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_isobmff_du_header;
+    }
+    std::uint32_t encoder_mmtp_isobmff_du_item_id() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_du_header_non_timed.item_id;
+    }
+    std::uint32_t encoder_mmtp_isobmff_du_movie_fragment_sequence_number()
+        const noexcept {
+        return _enc.encoder_config()
+            .mmtp_isobmff_du_header_timed.movie_fragment_sequence_number;
+    }
+    std::uint32_t encoder_mmtp_isobmff_du_sample_number() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_du_header_timed.sample_number;
+    }
+    std::uint32_t encoder_mmtp_isobmff_du_offset() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_du_header_timed.offset;
+    }
+    std::uint8_t encoder_mmtp_isobmff_du_subsample_priority() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_du_header_timed.subsample_priority;
+    }
+    std::uint8_t encoder_mmtp_isobmff_du_dependency_counter() const noexcept {
+        return _enc.encoder_config().mmtp_isobmff_du_header_timed.dependency_counter;
+    }
 
     // Admin HTTP GET/POST /services — state kept on shard 0 only.
     std::vector<admin_service_entry> list_admin_services() const;

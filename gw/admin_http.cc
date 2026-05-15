@@ -5,6 +5,7 @@
 #include "atsc3_gw.h"
 
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string_view>
@@ -35,6 +36,19 @@ namespace atsc3::gw {
 
 namespace {
 
+inline std::string gw_http_mmtp_extension_hex_field(
+    const std::vector<std::byte>& v) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string s;
+    s.reserve(v.size() * 2u);
+    for (const std::byte x : v) {
+        const auto u = static_cast<unsigned char>(x);
+        s.push_back(kHex[u >> 4u]);
+        s.push_back(kHex[u & 15u]);
+    }
+    return s;
+}
+
 struct GwHttpAdminConfigSnap {
     std::string ingress;
     std::string sink_uri;
@@ -48,6 +62,35 @@ struct GwHttpAdminConfigSnap {
     bool prepend_mmtp_word0 = false;
     std::uint8_t mmtp_payload_type = 0;
     std::uint16_t mmtp_packet_id = 0;
+    bool prepend_mmtp_ts_psn = false;
+    std::uint32_t mmtp_timestamp = 0;
+    std::uint32_t mmtp_psn = 0;
+    bool prepend_mmtp_packet_counter = false;
+    std::uint32_t mmtp_packet_counter = 0;
+    bool prepend_mmtp_extension = false;
+    std::vector<mmtp_extension_tlv> mmtp_extensions{};
+    bool prepend_mmtp_signalling_prefix = false;
+    std::uint8_t mmtp_signalling_fragmentation = 0;
+    std::uint8_t mmtp_signalling_reserved = 0;
+    bool mmtp_signalling_length_extension = false;
+    bool mmtp_signalling_aggregation = false;
+    std::uint8_t mmtp_signalling_fragment_counter = 0;
+    std::vector<std::vector<std::byte>> mmtp_signalling_aggregate_bodies{};
+    bool prepend_mmtp_isobmff_prefix = false;
+    std::uint8_t mmtp_isobmff_fragment_type = 0;
+    bool mmtp_isobmff_timed = false;
+    std::uint8_t mmtp_isobmff_fragmentation = 0;
+    bool mmtp_isobmff_aggregation = false;
+    std::uint8_t mmtp_isobmff_fragment_counter = 0;
+    std::uint32_t mmtp_isobmff_sequence_number = 0;
+    std::vector<std::vector<std::byte>> mmtp_isobmff_aggregate_bodies{};
+    bool prepend_mmtp_isobmff_du_header = false;
+    std::uint32_t mmtp_isobmff_du_item_id = 0;
+    std::uint32_t mmtp_isobmff_du_movie_fragment_sequence_number = 0;
+    std::uint32_t mmtp_isobmff_du_sample_number = 0;
+    std::uint32_t mmtp_isobmff_du_offset = 0;
+    std::uint8_t mmtp_isobmff_du_subsample_priority = 0;
+    std::uint8_t mmtp_isobmff_du_dependency_counter = 0;
 };
 
 inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
@@ -64,6 +107,47 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
     o.prepend_mmtp_word0    = s.encoder_prepends_mmtp_word0();
     o.mmtp_payload_type     = s.encoder_mmtp_payload_type();
     o.mmtp_packet_id        = s.encoder_mmtp_packet_id();
+    o.prepend_mmtp_ts_psn   = s.encoder_prepends_mmtp_ts_psn();
+    o.mmtp_timestamp        = s.encoder_mmtp_timestamp();
+    o.mmtp_psn              = s.encoder_mmtp_psn();
+    o.prepend_mmtp_packet_counter = s.encoder_prepends_mmtp_packet_counter();
+    o.mmtp_packet_counter         = s.encoder_mmtp_packet_counter();
+    o.prepend_mmtp_extension = s.encoder_prepends_mmtp_extension();
+    o.mmtp_extensions        = s.encoder_mmtp_extensions();
+    o.prepend_mmtp_signalling_prefix = s.encoder_prepends_mmtp_signalling_prefix();
+    o.mmtp_signalling_fragmentation =
+        s.encoder_mmtp_signalling_fragmentation();
+    o.mmtp_signalling_reserved = s.encoder_mmtp_signalling_reserved();
+    o.mmtp_signalling_length_extension =
+        s.encoder_mmtp_signalling_length_extension();
+    o.mmtp_signalling_aggregation = s.encoder_mmtp_signalling_aggregation();
+    o.mmtp_signalling_fragment_counter =
+        s.encoder_mmtp_signalling_fragment_counter();
+    o.mmtp_signalling_aggregate_bodies =
+        s.encoder_mmtp_signalling_aggregate_bodies();
+    o.prepend_mmtp_isobmff_prefix = s.encoder_prepends_mmtp_isobmff_prefix();
+    o.mmtp_isobmff_fragment_type =
+        s.encoder_mmtp_isobmff_fragment_type();
+    o.mmtp_isobmff_timed = s.encoder_mmtp_isobmff_timed_flag();
+    o.mmtp_isobmff_fragmentation =
+        s.encoder_mmtp_isobmff_fragmentation_indicator();
+    o.mmtp_isobmff_aggregation = s.encoder_mmtp_isobmff_aggregation_flag();
+    o.mmtp_isobmff_fragment_counter =
+        s.encoder_mmtp_isobmff_fragment_counter();
+    o.mmtp_isobmff_sequence_number = s.encoder_mmtp_isobmff_sequence_number();
+    o.mmtp_isobmff_aggregate_bodies =
+        s.encoder_mmtp_isobmff_aggregate_bodies();
+    o.prepend_mmtp_isobmff_du_header =
+        s.encoder_prepends_mmtp_isobmff_du_header();
+    o.mmtp_isobmff_du_item_id = s.encoder_mmtp_isobmff_du_item_id();
+    o.mmtp_isobmff_du_movie_fragment_sequence_number =
+        s.encoder_mmtp_isobmff_du_movie_fragment_sequence_number();
+    o.mmtp_isobmff_du_sample_number = s.encoder_mmtp_isobmff_du_sample_number();
+    o.mmtp_isobmff_du_offset          = s.encoder_mmtp_isobmff_du_offset();
+    o.mmtp_isobmff_du_subsample_priority =
+        s.encoder_mmtp_isobmff_du_subsample_priority();
+    o.mmtp_isobmff_du_dependency_counter =
+        s.encoder_mmtp_isobmff_du_dependency_counter();
     return o;
 }
 
@@ -388,6 +472,102 @@ public:
         w.Uint(static_cast<unsigned>(snap.mmtp_payload_type));
         w.Key("mmtp_packet_id");
         w.Uint(static_cast<unsigned>(snap.mmtp_packet_id));
+        w.Key("prepend_mmtp_ts_psn");
+        w.Bool(snap.prepend_mmtp_ts_psn);
+        w.Key("mmtp_timestamp");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_timestamp));
+        w.Key("mmtp_psn");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_psn));
+        w.Key("prepend_mmtp_packet_counter");
+        w.Bool(snap.prepend_mmtp_packet_counter);
+        w.Key("mmtp_packet_counter");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_packet_counter));
+        w.Key("prepend_mmtp_extension");
+        w.Bool(snap.prepend_mmtp_extension);
+        w.Key("mmtp_extension_type");
+        w.Uint(snap.mmtp_extensions.empty()
+                    ? 0u
+                    : static_cast<unsigned>(
+                          snap.mmtp_extensions.front().extension_type));
+        w.Key("mmtp_extension_hex");
+        {
+            const std::string hx =
+                snap.mmtp_extensions.empty()
+                    ? std::string{}
+                    : gw_http_mmtp_extension_hex_field(
+                          snap.mmtp_extensions.front().value);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.Key("mmtp_extensions");
+        w.StartArray();
+        for (const auto& tlv : snap.mmtp_extensions) {
+            w.StartObject();
+            w.Key("extension_type");
+            w.Uint(static_cast<unsigned>(tlv.extension_type));
+            w.Key("extension_hex");
+            {
+                const std::string hx =
+                    gw_http_mmtp_extension_hex_field(tlv.value);
+                w.String(hx.c_str(),
+                         static_cast<rapidjson::SizeType>(hx.size()));
+            }
+            w.EndObject();
+        }
+        w.EndArray();
+        w.Key("prepend_mmtp_signalling_prefix");
+        w.Bool(snap.prepend_mmtp_signalling_prefix);
+        w.Key("mmtp_signalling_fragmentation");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_fragmentation));
+        w.Key("mmtp_signalling_reserved");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_reserved));
+        w.Key("mmtp_signalling_length_extension");
+        w.Bool(snap.mmtp_signalling_length_extension);
+        w.Key("mmtp_signalling_aggregation");
+        w.Bool(snap.mmtp_signalling_aggregation);
+        w.Key("mmtp_signalling_fragment_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_fragment_counter));
+        w.Key("mmtp_signalling_aggregate_hex");
+        w.StartArray();
+        for (const auto& seg : snap.mmtp_signalling_aggregate_bodies) {
+            const std::string hx = gw_http_mmtp_extension_hex_field(seg);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.EndArray();
+        w.Key("prepend_mmtp_isobmff_prefix");
+        w.Bool(snap.prepend_mmtp_isobmff_prefix);
+        w.Key("mmtp_isobmff_fragment_type");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragment_type));
+        w.Key("mmtp_isobmff_timed");
+        w.Bool(snap.mmtp_isobmff_timed);
+        w.Key("mmtp_isobmff_fragmentation");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragmentation));
+        w.Key("mmtp_isobmff_aggregation");
+        w.Bool(snap.mmtp_isobmff_aggregation);
+        w.Key("mmtp_isobmff_fragment_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragment_counter));
+        w.Key("mmtp_isobmff_sequence_number");
+        w.Uint(snap.mmtp_isobmff_sequence_number);
+        w.Key("prepend_mmtp_isobmff_du_header");
+        w.Bool(snap.prepend_mmtp_isobmff_du_header);
+        w.Key("mmtp_isobmff_du_item_id");
+        w.Uint(snap.mmtp_isobmff_du_item_id);
+        w.Key("mmtp_isobmff_du_movie_fragment_sequence_number");
+        w.Uint(snap.mmtp_isobmff_du_movie_fragment_sequence_number);
+        w.Key("mmtp_isobmff_du_sample_number");
+        w.Uint(snap.mmtp_isobmff_du_sample_number);
+        w.Key("mmtp_isobmff_du_offset");
+        w.Uint(snap.mmtp_isobmff_du_offset);
+        w.Key("mmtp_isobmff_du_subsample_priority");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_du_subsample_priority));
+        w.Key("mmtp_isobmff_du_dependency_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_du_dependency_counter));
+        w.Key("mmtp_isobmff_aggregate_hex");
+        w.StartArray();
+        for (const auto& seg : snap.mmtp_isobmff_aggregate_bodies) {
+            const std::string hx = gw_http_mmtp_extension_hex_field(seg);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.EndArray();
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");
@@ -542,6 +722,102 @@ public:
         w.Uint(static_cast<unsigned>(snap.mmtp_payload_type));
         w.Key("mmtp_packet_id");
         w.Uint(static_cast<unsigned>(snap.mmtp_packet_id));
+        w.Key("prepend_mmtp_ts_psn");
+        w.Bool(snap.prepend_mmtp_ts_psn);
+        w.Key("mmtp_timestamp");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_timestamp));
+        w.Key("mmtp_psn");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_psn));
+        w.Key("prepend_mmtp_packet_counter");
+        w.Bool(snap.prepend_mmtp_packet_counter);
+        w.Key("mmtp_packet_counter");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_packet_counter));
+        w.Key("prepend_mmtp_extension");
+        w.Bool(snap.prepend_mmtp_extension);
+        w.Key("mmtp_extension_type");
+        w.Uint(snap.mmtp_extensions.empty()
+                    ? 0u
+                    : static_cast<unsigned>(
+                          snap.mmtp_extensions.front().extension_type));
+        w.Key("mmtp_extension_hex");
+        {
+            const std::string hx =
+                snap.mmtp_extensions.empty()
+                    ? std::string{}
+                    : gw_http_mmtp_extension_hex_field(
+                          snap.mmtp_extensions.front().value);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.Key("mmtp_extensions");
+        w.StartArray();
+        for (const auto& tlv : snap.mmtp_extensions) {
+            w.StartObject();
+            w.Key("extension_type");
+            w.Uint(static_cast<unsigned>(tlv.extension_type));
+            w.Key("extension_hex");
+            {
+                const std::string hx =
+                    gw_http_mmtp_extension_hex_field(tlv.value);
+                w.String(hx.c_str(),
+                         static_cast<rapidjson::SizeType>(hx.size()));
+            }
+            w.EndObject();
+        }
+        w.EndArray();
+        w.Key("prepend_mmtp_signalling_prefix");
+        w.Bool(snap.prepend_mmtp_signalling_prefix);
+        w.Key("mmtp_signalling_fragmentation");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_fragmentation));
+        w.Key("mmtp_signalling_reserved");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_reserved));
+        w.Key("mmtp_signalling_length_extension");
+        w.Bool(snap.mmtp_signalling_length_extension);
+        w.Key("mmtp_signalling_aggregation");
+        w.Bool(snap.mmtp_signalling_aggregation);
+        w.Key("mmtp_signalling_fragment_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_signalling_fragment_counter));
+        w.Key("mmtp_signalling_aggregate_hex");
+        w.StartArray();
+        for (const auto& seg : snap.mmtp_signalling_aggregate_bodies) {
+            const std::string hx = gw_http_mmtp_extension_hex_field(seg);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.EndArray();
+        w.Key("prepend_mmtp_isobmff_prefix");
+        w.Bool(snap.prepend_mmtp_isobmff_prefix);
+        w.Key("mmtp_isobmff_fragment_type");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragment_type));
+        w.Key("mmtp_isobmff_timed");
+        w.Bool(snap.mmtp_isobmff_timed);
+        w.Key("mmtp_isobmff_fragmentation");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragmentation));
+        w.Key("mmtp_isobmff_aggregation");
+        w.Bool(snap.mmtp_isobmff_aggregation);
+        w.Key("mmtp_isobmff_fragment_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_fragment_counter));
+        w.Key("mmtp_isobmff_sequence_number");
+        w.Uint(snap.mmtp_isobmff_sequence_number);
+        w.Key("prepend_mmtp_isobmff_du_header");
+        w.Bool(snap.prepend_mmtp_isobmff_du_header);
+        w.Key("mmtp_isobmff_du_item_id");
+        w.Uint(snap.mmtp_isobmff_du_item_id);
+        w.Key("mmtp_isobmff_du_movie_fragment_sequence_number");
+        w.Uint(snap.mmtp_isobmff_du_movie_fragment_sequence_number);
+        w.Key("mmtp_isobmff_du_sample_number");
+        w.Uint(snap.mmtp_isobmff_du_sample_number);
+        w.Key("mmtp_isobmff_du_offset");
+        w.Uint(snap.mmtp_isobmff_du_offset);
+        w.Key("mmtp_isobmff_du_subsample_priority");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_du_subsample_priority));
+        w.Key("mmtp_isobmff_du_dependency_counter");
+        w.Uint(static_cast<unsigned>(snap.mmtp_isobmff_du_dependency_counter));
+        w.Key("mmtp_isobmff_aggregate_hex");
+        w.StartArray();
+        for (const auto& seg : snap.mmtp_isobmff_aggregate_bodies) {
+            const std::string hx = gw_http_mmtp_extension_hex_field(seg);
+            w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
+        }
+        w.EndArray();
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");

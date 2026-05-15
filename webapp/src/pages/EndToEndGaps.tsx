@@ -222,7 +222,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "MMTP packetizer + signaling msgs",
         status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_length16 (A=1) + du_header timed/non-timed (FT=2); gfd_header (type 0x01); gw --prepend-mmtp-word0 (word-0 before optional LCT); mmt_probe verify --strip-mmtp-word0 + scripts/mmtp_word0_integration_test.sh (E/F); MFU/PA/MPI/MPT payload modes + signalling payload header (0x02) + gw ts_psn/extension stitch + multi-ext assembly still missing",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_length16 (A=1) + du_header timed/non-timed (FT=2); gfd_header (type 0x01); mmtp_payload_signalling_prefix (type 0x02, §9.3.4 first 16b); gw --prepend-mmtp-word0 + optional --prepend-mmtp-ts-psn + optional --prepend-mmtp-packet-counter + optional --prepend-mmtp-extension (--mmtp-extension TYPE:HEX multitoken chain or legacy type/hex) + optional --prepend-mmtp-signalling-prefix (--mmtp-signalling-*; with --mmtp-signalling-aggregation repeat --mmtp-signalling-aggregate-hex for §9.3.4 length+body pairs) + optional --prepend-mmtp-isobmff-prefix (--mmtp-isobmff-*; --mmtp-isobmff-aggregate-hex when aggregation, payload_type 0); mmt_probe verify --strip-mmtp-word0 / --strip-mmtp-ts-psn / --strip-mmtp-packet-counter / --strip-mmtp-extension / --strip-mmtp-signalling-prefix / --strip-mmtp-signalling-aggregate-count / --strip-mmtp-isobmff-prefix / --expect-mmtp-isobmff-aggregate-hex + scripts/mmtp_word0_integration_test.sh (E–P); MFU/PA/MPI/MPT still missing",
     },
     {
         layer: "Transport",
@@ -237,7 +237,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "UDP / IPv4 builder + checksums",
         status: "in-flight",
         notes:
-            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw prepend (optional BE32 TSI / TOI(O=1), or both); MMTP header YAML: word0 + ts_psn + counter32 + extension (codegen); full ROUTE/ALC/MMTP stack not in gw yet",
+            "lib/runtime/ipv4_udp.{hh,cc} encapsulate_ipv4_udp + checksums; ipv4udp-file:// sink; udp:// kernel path; protocol/lct_rfc5651_word0.yaml (LCT first word) + gw prepend (optional BE32 TSI / TOI(O=1), or both); MMTP header YAML: word0 + ts_psn + counter32 + extension (codegen); gw lab: word-0 + optional ts_psn + optional packet_counter + optional chained X extensions + optional signalling prefix (+ aggregation length+body) before optional LCT; full ROUTE/ALC/MMTP stack not in gw yet",
     },
     {
         layer: "Link",
@@ -418,14 +418,14 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
-            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); atsc3_gw --prepend-lct-word0 inside ALP; optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab); --prepend-mmtp-word0 adds MMTP packet header word-0 before optional LCT. " +
+            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); atsc3_gw --prepend-lct-word0 inside ALP; optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab); --prepend-mmtp-word0 adds MMTP packet header word-0 before optional LCT; optional --prepend-mmtp-ts-psn (--mmtp-timestamp, --mmtp-psn); optional --prepend-mmtp-packet-counter (--mmtp-packet-counter, requires ts_psn); optional --prepend-mmtp-extension (--mmtp-extension-type/--mmtp-extension-hex or --mmtp-extension TYPE:HEX multitoken chain); optional --prepend-mmtp-signalling-prefix (--mmtp-signalling-fragmentation, --mmtp-signalling-reserved, --mmtp-signalling-length-extension, --mmtp-signalling-aggregation, --mmtp-signalling-fragment-counter; with aggregation repeat --mmtp-signalling-aggregate-hex); optional --prepend-mmtp-isobmff-prefix (--mmtp-isobmff-*, payload_type 0, A=0 lab). " +
             "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: MMTP signalling payload header YAML (type 0x02); optional gw ts_psn + mmt_probe peel for ts_psn / multi-X after word-0.",
+            "ALP encapsulation already accepts opaque payloads. Next: optional YAML + gw / mmt_probe for MFU / PA / MPI / MPT bodies.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
             "ROUTE/LCT packetizer (partial: LCT header word-0 YAML + optional TSI/TOI bytes in gw)",
-            "MMTP packetizer (partial: mmtp_header_* + mmtp_desc + gw --prepend-mmtp-word0)",
+            "MMTP packetizer (partial: mmtp_header_* + mmtp_desc + gw prepend lab + mmt_probe strip/expect for word-0, ts_psn, packet_counter, chained X extensions, signalling §9.3.4 prefix + aggregation peel, ISOBMFF 64b prefix peel + A=1 DU_length peel; integration E–P)",
             "Raptor10/RaptorQ FEC",
         ],
     },
@@ -625,7 +625,7 @@ export default function EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi and/or --lct-include-toi --lct-toi), optional --prepend-mmtp-word0 (--mmtp-payload-type, --mmtp-packet-id), optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi and/or --lct-include-toi --lct-toi), optional --prepend-mmtp-word0 (--mmtp-payload-type, --mmtp-packet-id) with optional --prepend-mmtp-ts-psn (--mmtp-timestamp, --mmtp-psn), optional --prepend-mmtp-packet-counter (--mmtp-packet-counter, requires ts_psn), optional --prepend-mmtp-extension (--mmtp-extension-type, --mmtp-extension-hex), optional --prepend-mmtp-signalling-prefix (--mmtp-signalling-fragmentation, --mmtp-signalling-reserved, --mmtp-signalling-length-extension, --mmtp-signalling-aggregation, --mmtp-signalling-fragment-counter), optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
                         ]}
                     />
                     <BulletGroup
@@ -642,8 +642,8 @@ export default function EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi / --lct-include-toi / both); gw --prepend-mmtp-word0 before optional LCT",
-                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X); mmtp_payload_isobmff_prefix.yaml; mmtp_payload_isobmff_du_length16.yaml; du_header_{timed,non_timed}.yaml; mmtp_payload_gfd_header.yaml (type 0x01)",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi / --lct-include-toi / both); gw --prepend-mmtp-word0 (--mmtp-payload-type, --mmtp-packet-id) + optional --prepend-mmtp-ts-psn + optional --prepend-mmtp-packet-counter + optional --prepend-mmtp-extension + optional --prepend-mmtp-signalling-prefix (+ --mmtp-signalling-aggregate-hex when aggregating) + optional --prepend-mmtp-isobmff-prefix (+ --mmtp-isobmff-*) before optional LCT",
+                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X); mmtp_payload_isobmff_prefix.yaml; mmtp_payload_isobmff_du_length16.yaml; du_header_{timed,non_timed}.yaml; mmtp_payload_gfd_header.yaml (type 0x01); mmtp_payload_signalling_prefix.yaml (type 0x02, §9.3.4)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -651,16 +651,16 @@ export default function EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (43 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (46 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",
                             "scripts/stltp_integration_test.sh — stltp:// lab UDP strip + verify",
                             "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
                             "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
-                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + MMTP word‑0 + RTCM 12×96",
+                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + MMTP lab (E–P) + RTCM 12×96",
                             "scripts/lct_word0_integration_test.sh — A/B/C/D: word‑0 · TSI · TOI · TSI+TOI + mmt_probe verify --strip-lct-word0 (optional --expect-lct-tsi and/or --expect-lct-toi)",
-                            "scripts/mmtp_word0_integration_test.sh — E/F: MMTP word‑0 only · MMTP+LCT + verify --strip-mmtp-word0 [--expect-mmtp-*] + optional --strip-lct-word0",
+                            "scripts/mmtp_word0_integration_test.sh — E/word‑0 only · F/word‑0+LCT · G/word‑0+ts_psn · H/word‑0+extension · I/word‑0+ts_psn+extension · J/word‑0+ts_psn+packet_counter · K/full prefix stack · L/word‑0+signalling prefix · M/word‑0+chained X · N/word‑0+signalling aggregation · O/word‑0+ISOBMFF prefix (A=0) · P/word‑0+ISOBMFF aggregation (A=1); mmt_probe verify --strip-mmtp-word0 / --strip-mmtp-ts-psn / --strip-mmtp-packet-counter / --strip-mmtp-extension / --strip-mmtp-signalling-prefix / --strip-mmtp-signalling-aggregate-count / --strip-mmtp-isobmff-prefix [--expect-mmtp-*] [--expect-mmtp-isobmff-aggregate-hex] + optional --strip-lct-word0",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
                             "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
                             ".github/workflows/ci.yml — Python lint + codegen + codec_smoke + webapp npm build (no Docker); C++/integration: make build && make integ* locally; workflow_dispatch",

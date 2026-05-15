@@ -4,7 +4,16 @@
 //
 //   raw payload bytes
 //       │  optional M8: prepend ISO/IEC 23008-1 MMTP packet header word‑0
-//       │  (see prepend_mmtp_header_word0), then optional RFC 5651 LCT word‑0
+//       │  (see prepend_mmtp_header_word0), optional **mmtp_header_ts_psn** (64b),
+//       │  optional **mmtp_header_counter32** (32b when **C**=**1**),
+//       │  optional **mmtp_header_extension** chain (zero or more X TLVs: 32b + value each),
+//       │  optional **mmtp_payload_isobmff_prefix** (64b Figure 3 when **payload_type**=**0x00**)
+//       │  and optional **mmtp_payload_isobmff_du_header_*** (Figures 4–5 when **FT**=**2** lab)
+//       │  or optional **mmtp_payload_signalling_prefix** (16b §9.3.4 when **payload_type**=**0x02**)
+//       │  (mutually exclusive); signalling may add **aggregated** length+body pairs when **A**=**1**;
+//       │  ISOBMFF may add **DU_length** (16b BE) + (**optional** **DU_header**) + media per
+//       │  **`mmtp_isobmff_aggregate_bodies`** when **aggregation_flag**=**1**,
+//       │  then optional RFC 5651 LCT word‑0
 //       ▼
 //   ┌─────────────────────┐
 //   │  ALP encode         │  packet_type = PACKET_TYPE_EXTENSION (default)
@@ -22,9 +31,15 @@
 //
 // Limits:
 //   * Without any prepend: opaque payload ≤ 2047 bytes (ALP 11-bit length).
-//   * With prepend_mmtp_header_word0: ALP opaque = MMTP word‑0 (32b) ∪ user
-//     (≤ 2043 user bytes). May be combined with LCT lab prefix below (prefix
-//     order on the wire: **MMTP word‑0**, then **LCT** + optional TSI/TOI).
+//   * With prepend_mmtp_header_word0: ALP opaque = MMTP word‑0 (32b) ∪ optional
+//     **`mmtp_header_ts_psn`** (64b) ∪ optional **`mmtp_header_counter32`** (32b
+//     when **C**=**1**; requires **ts_psn** on this lab path) ∪ optional
+//     **mmtp_header_extension** TLVs (each 4+N B) ∪ optional **ISOBMFF payload prefix** (8 B)
+//     ∪ optional **signalling payload prefix** (2 B; not with ISOBMFF) ∪ user. Prefix order:
+//     **MMTP word‑0**, optional **ts_psn**, optional **packet_counter**,
+//     optional **extension** chain, optional **ISOBMFF** or **signalling** payload prefix, optional
+//     **ISOBMFF DU_header** (timed/non-timed), optional **ISOBMFF DU_length+body** repeats when **A**=**1**,
+//     then **LCT** + optional TSI/TOI.
 //   * With prepend_rfc5651_lct_word0: ALP opaque = word‑0 (32b) ∪ optional RFC
 //     reorder fields ∪ user ≤ 2047 total (**CCI omitted** lab stitch).
 //     · word‑0 only (`header_length_words == 1`): ≤ 2043 user.
@@ -50,10 +65,21 @@
 
 #include "alp_types.h"
 #include "lct_rfc5651_word0_decoder.h"
+#include "mmtp_header_ts_psn_decoder.h"
 #include "mmtp_header_word0_decoder.h"
+#include "mmtp_payload_isobmff_du_header_non_timed_decoder.h"
+#include "mmtp_payload_isobmff_du_header_timed_decoder.h"
+#include "mmtp_payload_isobmff_prefix_decoder.h"
+#include "mmtp_payload_signalling_prefix_decoder.h"
 #include "tlv_mux_types.h"
 
 namespace atsc3::gw {
+
+/// One **mmtp_header_extension** unit (type + length + opaque value octets).
+struct mmtp_extension_tlv {
+    std::uint16_t extension_type = 0;
+    std::vector<std::byte> value{};
+};
 
 class encoder_pipeline {
 public:
@@ -69,6 +95,55 @@ public:
         /// flags are set.
         bool prepend_mmtp_header_word0 = false;
         atsc3::mmtp_header_word0::decoded_t mmtp_word0{};
+        /// When true (requires **prepend_mmtp_header_word0**), append
+        /// **`mmtp_header_ts_psn`** (64b BE) immediately after MMTP word‑0.
+        bool prepend_mmtp_ts_psn = false;
+        atsc3::mmtp_header_ts_psn::decoded_t mmtp_ts_psn{};
+        /// When true (requires **prepend_mmtp_header_word0** and
+        /// **prepend_mmtp_ts_psn**), append **`mmtp_header_counter32`** (32b BE)
+        /// after **ts_psn** per ISO/IEC 23008-1. Sets **packet_counter_flag** (**C**)
+        /// on the encoded MMTP word‑0.
+        bool prepend_mmtp_packet_counter = false;
+        std::uint32_t mmtp_packet_counter = 0;
+        /// Non-empty ⇒ append that many **`mmtp_header_extension`** TLVs (in order)
+        /// after optional **ts_psn** and optional **packet_counter**. Sets **extension_flag** (**X**)
+        /// on the encoded MMTP word‑0 when non-empty.
+        std::vector<mmtp_extension_tlv> mmtp_extensions{};
+        /// When true (requires **prepend_mmtp_header_word0**), append
+        /// **`mmtp_payload_signalling_prefix`** (16b, **ISO/IEC 23008-1** **9.3.4**)
+        /// after optional **ts_psn**, **packet_counter**, and **extension** chain.
+        bool prepend_mmtp_signalling_prefix = false;
+        atsc3::mmtp_payload_signalling_prefix::decoded_t mmtp_signalling_prefix{};
+        /// When **`mmtp_signalling_prefix.aggregation_flag`** is **true**, append each
+        /// entry as **BE length** (**16** or **32** bits per **`length_extension_flag`**)
+        /// then body octets (**length** = body size on this lab path). Must be empty when
+        /// **aggregation_flag** is **false**.
+        std::vector<std::vector<std::byte>> mmtp_signalling_aggregate_bodies{};
+
+        /// When true (requires **prepend_mmtp_header_word0**), append
+        /// **`mmtp_payload_isobmff_prefix`** (64b, **ISO/IEC 23008-1** Figure 3 rows 1–2)
+        /// after optional **ts_psn**, **packet_counter**, and **extension** chain.
+        /// Mutually exclusive with **prepend_mmtp_signalling_prefix**; requires
+        /// **mmtp_word0.payload_type** **==** **0** (ISOBMFF mode). **`payload_length_excluding_length_field`**
+        /// counts octets after the prefix’s **16-bit length** field: **6** (rest of prefix) **+**
+        /// (**A**=**0**: ingress only) **or** (**A**=**1**: Σ (**2** + **`body.size()`**) per entry) **+**
+        /// optional RFC 5651 LCT lab octets **+** ingress. When **aggregation_flag** is **true**,
+        /// **`mmtp_isobmff_aggregate_bodies`** must be non-empty; each **body** is one DU’s octets
+        /// (**DU_Header** + media) and is prefixed on the wire with **16-bit BE** **DU_length** =
+        /// **`body.size()`**. When **false**, **`mmtp_isobmff_aggregate_bodies`** must be empty.
+        bool prepend_mmtp_isobmff_prefix = false;
+        atsc3::mmtp_payload_isobmff_prefix::decoded_t mmtp_isobmff_prefix{};
+        /// When **`mmtp_isobmff_prefix.aggregation_flag`** is **true**, append each entry as
+        /// **BE DU_length** (**16** bits = **`body.size()`**) then **`body`** octets. Must be empty
+        /// when **aggregation_flag** is **false**.
+        std::vector<std::vector<std::byte>> mmtp_isobmff_aggregate_bodies{};
+        /// When true (requires **prepend_mmtp_isobmff_prefix**), emit **`mmtp_payload_isobmff_du_header_*`**
+        /// after the **64b** ISOBMFF prefix (**Figure** **4**/**5**): **14** B timed or **4** B non-timed
+        /// per **`mmtp_isobmff_prefix.timed_flag`**, then **A**=**0** ingress or (**A**=**1**) each
+        /// aggregate **media** chunk (header repeated per DU). Requires **`fragment_type`** **==** **2**.
+        bool prepend_mmtp_isobmff_du_header = false;
+        atsc3::mmtp_payload_isobmff_du_header_timed::decoded_t mmtp_isobmff_du_header_timed{};
+        atsc3::mmtp_payload_isobmff_du_header_non_timed::decoded_t mmtp_isobmff_du_header_non_timed{};
 
         /// M8 lab: prepend RFC 5651 §5.1 fixed fields before ingress in the ALP
         /// opaque body (**no CCI** extension — `header_length_words` counts trailing
@@ -130,6 +205,60 @@ private:
     m.payload_type =
         (payload_type > 63u) ? static_cast<std::uint8_t>(63) : payload_type;
     m.packet_id = packet_id;
+    return base;
+}
+
+/// Append **`mmtp_header_ts_psn`** after MMTP word‑0 (**requires** that the base
+/// config already enables **`prepend_mmtp_header_word0`**).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_ts_psn(
+    std::uint32_t timestamp,
+    std::uint32_t packet_sequence_number,
+    encoder_pipeline::config base) noexcept {
+    base.prepend_mmtp_ts_psn                    = true;
+    base.mmtp_ts_psn.timestamp                = timestamp;
+    base.mmtp_ts_psn.packet_sequence_number   = packet_sequence_number;
+    return base;
+}
+
+/// Append **`mmtp_header_counter32`** after **ts_psn** (**requires** that `base`
+/// already has **`prepend_mmtp_ts_psn`** and **`prepend_mmtp_header_word0`**).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_packet_counter(
+    std::uint32_t packet_counter,
+    encoder_pipeline::config base) noexcept {
+    base.prepend_mmtp_packet_counter = true;
+    base.mmtp_packet_counter         = packet_counter;
+    return base;
+}
+
+/// Append one **`mmtp_header_extension`** after optional **ts_psn** and optional
+/// **packet_counter** (**requires**
+/// **prepend_mmtp_header_word0** on `base`).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_extension(
+    std::uint16_t extension_type,
+    std::vector<std::byte> extension_value,
+    encoder_pipeline::config base) noexcept {
+    base.mmtp_extensions.push_back(
+        mmtp_extension_tlv{extension_type, std::move(extension_value)});
+    return base;
+}
+
+/// Append **`mmtp_payload_signalling_prefix`** after optional MMTP packet header
+/// extensions (**requires** **prepend_mmtp_header_word0** on `base`).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_signalling_prefix(
+    atsc3::mmtp_payload_signalling_prefix::decoded_t sig,
+    encoder_pipeline::config base) noexcept {
+    base.prepend_mmtp_signalling_prefix = true;
+    base.mmtp_signalling_prefix        = sig;
+    return base;
+}
+
+/// Append **`mmtp_payload_isobmff_prefix`** after optional MMTP packet header extensions
+/// (**requires** **prepend_mmtp_header_word0** on `base`; **not** with signalling prefix).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_isobmff_prefix(
+    atsc3::mmtp_payload_isobmff_prefix::decoded_t iso,
+    encoder_pipeline::config base) noexcept {
+    base.prepend_mmtp_isobmff_prefix = true;
+    base.mmtp_isobmff_prefix         = iso;
     return base;
 }
 

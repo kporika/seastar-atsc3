@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Integration: (E) MMTP word-0 only; (F) MMTP word-0 then LCT word-0 (gw lab order).
+# Integration: (E) word-0 only; (F) word-0+LCT; (G) word-0+ts_psn; (H) word-0+extension;
+# (I) word-0+ts_psn+extension; (J) word-0+ts_psn+packet_counter; (K) word-0+ts_psn+counter+extension;
+# (L) word-0 + signalling payload prefix (§9.3.4, 16b); (M) word-0 + two chained **X** extensions;
+# (N) word-0 + signalling prefix (L=1, A=1) + §9.3.4 aggregated bodies (32b lengths);
+# (O) word-0 (**payload_type**=**0**) + **ISOBMFF** payload prefix (64b Figure 3, **A**=**0**);
+# (P) word-0 + **ISOBMFF** **A**=**1** + **DU_length**+body pairs (**--mmtp-isobmff-aggregate-hex**).
 #
 # Usage:
 #   scripts/mmtp_word0_integration_test.sh [BUILD_DIR]
@@ -20,6 +25,14 @@ probe_bin="$(resolve_bin "${MMT_PROBE:-}" "${build_dir}/mmt_probe/mmt_probe" mmt
 mmtp_pt=2
 mmtp_pid=16
 lct_cp=91
+mmtp_ts=305419896   # 0x12345678
+mmtp_psn=42
+mmtp_ext_type=43981   # 0xABCD (matches mmtp_header_extension fixture four_byte_value)
+mmtp_ext_hex=DEADBEEF
+mmtp_ext2_type=7
+mmtp_ext2_hex=0102
+mmtp_pc=3735928559    # 0xDEADBEEF (mmtp_header_counter32 fixture)
+mmtp_iso_seq=287454020  # 0x11223344 (mmtp_payload_isobmff_prefix fixture media_unit_single_du)
 
 echo "[mmtp_word0_integ] gw=${gw_bin}"
 echo "[mmtp_word0_integ] probe=${probe_bin}"
@@ -92,6 +105,16 @@ run_phase() {
 
 port_e=$(( ( RANDOM % 10000 ) + 27000 ))
 port_f=$(( ( RANDOM % 10000 ) + 37000 ))
+port_g=$(( ( RANDOM % 10000 ) + 47000 ))
+port_h=$(( ( RANDOM % 10000 ) + 57000 ))
+port_i=$(( ( RANDOM % 10000 ) + 67000 ))
+port_j=$(( ( RANDOM % 10000 ) + 77000 ))
+port_k=$(( ( RANDOM % 10000 ) + 87000 ))
+port_l=$(( ( RANDOM % 10000 ) + 97000 ))
+port_m=$(( ( RANDOM % 10000 ) + 107000 ))
+port_n=$(( ( RANDOM % 10000 ) + 117000 ))
+port_o=$(( ( RANDOM % 10000 ) + 127000 ))
+port_p=$(( ( RANDOM % 10000 ) + 137000 ))
 
 echo "[mmtp_word0_integ] phase E: MMTP word-0 only (payload_type=${mmtp_pt} packet_id=${mmtp_pid})"
 run_phase "E" "${port_e}" "${tmpdir}/e.out" "${tmpdir}/gw_e.log" \
@@ -119,6 +142,236 @@ run_phase "F" "${port_f}" "${tmpdir}/f.out" "${tmpdir}/gw_f.log" \
     --expect-mmtp-packet-id "${mmtp_pid}" \
     --strip-lct-word0 \
     --expect-lct-codepoint "${lct_cp}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase G: MMTP word-0 + ts_psn (ts=${mmtp_ts} psn=${mmtp_psn})"
+run_phase "G" "${port_g}" "${tmpdir}/g.out" "${tmpdir}/gw_g.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-ts-psn \
+    --mmtp-timestamp "${mmtp_ts}" \
+    --mmtp-psn "${mmtp_psn}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/g.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-ts-psn \
+    --expect-mmtp-timestamp "${mmtp_ts}" \
+    --expect-mmtp-psn "${mmtp_psn}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase H: MMTP word-0 + header extension (type=${mmtp_ext_type})"
+run_phase "H" "${port_h}" "${tmpdir}/h.out" "${tmpdir}/gw_h.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-extension \
+    --mmtp-extension-type "${mmtp_ext_type}" \
+    --mmtp-extension-hex "${mmtp_ext_hex}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/h.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-extension \
+    --expect-mmtp-extension-type "${mmtp_ext_type}" \
+    --expect-mmtp-extension-hex "${mmtp_ext_hex}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase I: MMTP word-0 + ts_psn + extension"
+run_phase "I" "${port_i}" "${tmpdir}/i.out" "${tmpdir}/gw_i.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-ts-psn \
+    --mmtp-timestamp "${mmtp_ts}" \
+    --mmtp-psn "${mmtp_psn}" \
+    --prepend-mmtp-extension \
+    --mmtp-extension-type "${mmtp_ext_type}" \
+    --mmtp-extension-hex "${mmtp_ext_hex}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/i.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-ts-psn \
+    --expect-mmtp-timestamp "${mmtp_ts}" \
+    --expect-mmtp-psn "${mmtp_psn}" \
+    --strip-mmtp-extension \
+    --expect-mmtp-extension-type "${mmtp_ext_type}" \
+    --expect-mmtp-extension-hex "${mmtp_ext_hex}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase J: MMTP word-0 + ts_psn + packet_counter (pc=${mmtp_pc})"
+run_phase "J" "${port_j}" "${tmpdir}/j.out" "${tmpdir}/gw_j.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-ts-psn \
+    --mmtp-timestamp "${mmtp_ts}" \
+    --mmtp-psn "${mmtp_psn}" \
+    --prepend-mmtp-packet-counter \
+    --mmtp-packet-counter "${mmtp_pc}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/j.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-ts-psn \
+    --expect-mmtp-timestamp "${mmtp_ts}" \
+    --expect-mmtp-psn "${mmtp_psn}" \
+    --strip-mmtp-packet-counter \
+    --expect-mmtp-packet-counter "${mmtp_pc}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase K: MMTP word-0 + ts_psn + packet_counter + extension"
+run_phase "K" "${port_k}" "${tmpdir}/k.out" "${tmpdir}/gw_k.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-ts-psn \
+    --mmtp-timestamp "${mmtp_ts}" \
+    --mmtp-psn "${mmtp_psn}" \
+    --prepend-mmtp-packet-counter \
+    --mmtp-packet-counter "${mmtp_pc}" \
+    --prepend-mmtp-extension \
+    --mmtp-extension-type "${mmtp_ext_type}" \
+    --mmtp-extension-hex "${mmtp_ext_hex}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/k.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-ts-psn \
+    --expect-mmtp-timestamp "${mmtp_ts}" \
+    --expect-mmtp-psn "${mmtp_psn}" \
+    --strip-mmtp-packet-counter \
+    --expect-mmtp-packet-counter "${mmtp_pc}" \
+    --strip-mmtp-extension \
+    --expect-mmtp-extension-type "${mmtp_ext_type}" \
+    --expect-mmtp-extension-hex "${mmtp_ext_hex}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase L: MMTP word-0 + signalling payload prefix (FI=1 L=1 frag_ctr=7 → 42 07)"
+run_phase "L" "${port_l}" "${tmpdir}/l.out" "${tmpdir}/gw_l.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --mmtp-signalling-fragmentation 1 \
+    --mmtp-signalling-length-extension \
+    --mmtp-signalling-fragment-counter 7
+"${probe_bin}" verify \
+    --file "${tmpdir}/l.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 1 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 1 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 7 \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase M: MMTP word-0 + chained header extensions (2× X)"
+run_phase "M" "${port_m}" "${tmpdir}/m.out" "${tmpdir}/gw_m.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-extension \
+    --mmtp-extension "${mmtp_ext_type}:${mmtp_ext_hex}" \
+    --mmtp-extension "${mmtp_ext2_type}:${mmtp_ext2_hex}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/m.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-extension \
+    --strip-mmtp-extension-count 2 \
+    --expect-mmtp-extension-pair "${mmtp_ext_type}:${mmtp_ext_hex}" \
+    --expect-mmtp-extension-pair "${mmtp_ext2_type}:${mmtp_ext2_hex}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase N: MMTP word-0 + signalling (L=1, A=1) + aggregated bodies (32b lengths)"
+run_phase "N" "${port_n}" "${tmpdir}/n.out" "${tmpdir}/gw_n.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --mmtp-signalling-length-extension \
+    --mmtp-signalling-aggregation \
+    --mmtp-signalling-aggregate-hex 010203 --mmtp-signalling-aggregate-hex FEED
+"${probe_bin}" verify \
+    --file "${tmpdir}/n.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 1 \
+    --expect-mmtp-signalling-aggregation 1 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmtp-signalling-aggregate-count 2 \
+    --expect-mmtp-signalling-aggregate-hex 010203 \
+    --expect-mmtp-signalling-aggregate-hex FEED \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase O: MMTP word-0 (ISOBMFF **payload_type**=**0**) + **mmtp_payload_isobmff_prefix** (FT=2, T=1, seq=0x11223344)"
+run_phase "O" "${port_o}" "${tmpdir}/o.out" "${tmpdir}/gw_o.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 0 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-isobmff-prefix \
+    --mmtp-isobmff-fragment-type 2 \
+    --mmtp-isobmff-timed \
+    --mmtp-isobmff-fragmentation 0 \
+    --mmtp-isobmff-fragment-counter 0 \
+    --mmtp-isobmff-sequence-number "${mmtp_iso_seq}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/o.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 0 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-isobmff-prefix \
+    --expect-mmtp-isobmff-fragment-type 2 \
+    --expect-mmtp-isobmff-timed 1 \
+    --expect-mmtp-isobmff-fragmentation 0 \
+    --expect-mmtp-isobmff-aggregation 0 \
+    --expect-mmtp-isobmff-fragment-counter 0 \
+    --expect-mmtp-isobmff-sequence-number "${mmtp_iso_seq}" \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase P: MMTP word-0 + ISOBMFF prefix (**A**=**1**) + **DU_length** + body pairs + CSV tail"
+run_phase "P" "${port_p}" "${tmpdir}/p.out" "${tmpdir}/gw_p.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 0 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-isobmff-prefix \
+    --mmtp-isobmff-fragment-type 2 \
+    --mmtp-isobmff-timed \
+    --mmtp-isobmff-fragmentation 0 \
+    --mmtp-isobmff-aggregation \
+    --mmtp-isobmff-aggregate-hex AABB --mmtp-isobmff-aggregate-hex CC \
+    --mmtp-isobmff-fragment-counter 0 \
+    --mmtp-isobmff-sequence-number "${mmtp_iso_seq}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/p.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 0 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-isobmff-prefix \
+    --expect-mmtp-isobmff-fragment-type 2 \
+    --expect-mmtp-isobmff-timed 1 \
+    --expect-mmtp-isobmff-fragmentation 0 \
+    --expect-mmtp-isobmff-aggregation 1 \
+    --expect-mmtp-isobmff-fragment-counter 0 \
+    --expect-mmtp-isobmff-sequence-number "${mmtp_iso_seq}" \
+    --expect-mmtp-isobmff-aggregate-hex AABB \
+    --expect-mmtp-isobmff-aggregate-hex CC \
     --expected-payloads "${payloads}"
 
 echo "[mmtp_word0_integ] PASS"

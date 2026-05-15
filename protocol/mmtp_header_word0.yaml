@@ -16,6 +16,9 @@
 # when **aggregation_flag** is **1** (repeat per aggregated DU), then **DU** headers
 # (**`mmtp_payload_isobmff_du_header_{timed,non_timed}.yaml`** when **FT**=**2**).
 # When **payload_type** is **0x01** (generic object / GFD), use **`mmtp_payload_gfd_header.yaml`**.
+# When **payload_type** is **0x02** (signalling message mode), the payload begins with
+# **`mmtp_payload_signalling_prefix.yaml`** (**ISO/IEC 23008-1** **9.3.4**), then
+# signalling data (and optional aggregated lengths — see that YAML).
 # Other **payload_type** values use different payload headers (future YAML).
 #
 # Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
