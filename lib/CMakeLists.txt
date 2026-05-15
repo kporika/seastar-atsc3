@@ -1,5 +1,33 @@
 # atsc3_proto codec library.
 #
+include(FetchContent)
+
+# RapidJSON (header-only). Prefer the system install; otherwise fetch a pinned
+# tag so macOS / minimal sandboxes can still compile without `brew install rapidjson`.
+find_path(ATSC3_RAPIDJSON_INCLUDE_DIR
+    NAMES rapidjson/document.h
+    PATHS
+        /usr/include
+        /opt/homebrew/include
+        /usr/local/include
+        "$ENV{HOMEBREW_PREFIX}/include"
+        "$ENV{RAPIDJSON_ROOT}/include")
+if(ATSC3_RAPIDJSON_INCLUDE_DIR)
+    message(STATUS "rapidjson include: ${ATSC3_RAPIDJSON_INCLUDE_DIR}")
+else()
+    message(STATUS "rapidjson not found in system paths; FetchContent (Tencent/rapidjson v1.1.0)")
+    FetchContent_Declare(
+        rapidjson_vendor
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG v1.1.0
+        GIT_SHALLOW TRUE)
+    FetchContent_GetProperties(rapidjson_vendor)
+    if(NOT rapidjson_vendor_POPULATED)
+        FetchContent_Populate(rapidjson_vendor)
+    endif()
+    set(ATSC3_RAPIDJSON_INCLUDE_DIR "${rapidjson_vendor_SOURCE_DIR}/include")
+endif()
+
 # Sources are split into:
 #   - runtime/  : hand-written, protocol-agnostic helpers (bit_reader.h, ...)
 #   - generated/: codegen output from tools/codegen.py (regenerated each build)
@@ -45,7 +73,5 @@ add_library(atsc3_proto STATIC ${ATSC3_PROTO_SOURCES})
 target_include_directories(atsc3_proto PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/runtime
-    ${CMAKE_CURRENT_LIST_DIR}/generated)
-# rapidjson is header-only and ships at /usr/include/rapidjson on the
-# atsc3-deps image (and most distro packages). Add explicitly for portability.
-target_include_directories(atsc3_proto PUBLIC /usr/include)
+    ${CMAKE_CURRENT_LIST_DIR}/generated
+    ${ATSC3_RAPIDJSON_INCLUDE_DIR})

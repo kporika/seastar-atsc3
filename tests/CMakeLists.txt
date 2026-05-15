@@ -17,8 +17,7 @@ if(ATSC3_PROTO_GENERATED_TESTS)
         add_executable(${test_name} ${test_src})
         target_link_libraries(${test_name} PRIVATE atsc3_proto)
         target_include_directories(${test_name} PRIVATE
-            ${CMAKE_SOURCE_DIR}/lib/generated
-            /usr/include)
+            ${CMAKE_SOURCE_DIR}/lib/generated)
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
 else()

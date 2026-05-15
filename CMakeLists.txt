@@ -38,18 +38,25 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Find Seastar via its installed CMake config (preferred over pkg-config —
-# the SeastarConfig.cmake export carries the full transitive link line:
-# libcares-seastar, hwloc, gnutls, sctp, lz4, ucontext/getcontext, ...).
-# Dockerfile.deps in this directory installs Seastar 25.05.0 under /usr; for
-# native builds install Seastar separately and ensure `find_package(Seastar)`
-# resolves (Seastar's own `ninja install` puts SeastarConfig.cmake in
-# <prefix>/lib/<arch>/cmake/Seastar/).
+# Seastar is required only for `atsc3_gw`. The codec library, generated fixture
+# tests, `mmt_probe`, and `encoder_pipeline_test` link only `atsc3_proto` and
+# build without Seastar — handy on laptops/CI jobs that only need ctest+smoke.
+#
+# Install Seastar (see Dockerfile.deps) and re-configure to get `atsc3_gw`.
 # -----------------------------------------------------------------------------
-find_package(Seastar REQUIRED)
+find_package(Seastar QUIET)
+if(Seastar_FOUND)
+    message(STATUS "Seastar found — building atsc3_gw")
+    set(ATSC3_PROTO_WITH_GW ON)
+else()
+    message(STATUS "Seastar not found — skipping atsc3_gw (lib + mmt_probe + tests still build)")
+    set(ATSC3_PROTO_WITH_GW OFF)
+endif()
 
 add_subdirectory(lib)
-add_subdirectory(gw)
+if(ATSC3_PROTO_WITH_GW)
+    add_subdirectory(gw)
+endif()
 add_subdirectory(mmt_probe)
 
 enable_testing()

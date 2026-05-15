@@ -27,6 +27,10 @@ cmake -G Ninja \
 ninja -j "${MAKE_JOBS:-16}"
 
 echo
-echo ">>> built: $(pwd)/gw/atsc3_gw"
+if [[ -f gw/atsc3_gw ]]; then
+    echo ">>> built: $(pwd)/gw/atsc3_gw"
+else
+    echo ">>> skipped: gw/atsc3_gw (install Seastar + re-run cmake to build gateway)"
+fi
 echo ">>> built: $(pwd)/mmt_probe/mmt_probe"
 echo ">>> tests: cd $(pwd) && ctest --output-on-failure"
