@@ -46,7 +46,7 @@ APP_DOCKERFILE  := Dockerfile.app
 DEPS_STAMP     := .make/deps.stamp
 
 .PHONY: default build codegen clean lint smoke integ integ-udp integ-ipv4udp integ-stltp integ-lct-word0 integ-lls integ-rtcm integ-admin integ-all \
-        deps image image-fast docker-build image-integ image-integ-udp image-integ-ipv4udp image-integ-stltp image-integ-lct-word0 image-integ-lls image-integ-rtcm image-integ-admin image-integ-all run image-shell deps-shell
+        deps image image-fast docker-build docker-ctest image-integ image-integ-udp image-integ-ipv4udp image-integ-stltp image-integ-lct-word0 image-integ-lls image-integ-rtcm image-integ-admin image-integ-all run image-shell deps-shell
 
 default: build
 
@@ -198,3 +198,9 @@ docker-build: $(DEPS_STAMP)
 		bash -lc 'set -euo pipefail; cmake -G Ninja \
 			-DCMAKE_BUILD_TYPE="$${DOCKER_BUILD_TYPE:-RelWithDebInfo}" \
 			-DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..; ninja -j"$${DOCKER_MAKE_JOBS:-8}"'
+
+# Full Linux/Seastar build + ctest + codec_smoke inside deps image (same as
+# Dockerfile.app test stage, without rebuilding the runtime image).
+docker-ctest: $(DEPS_STAMP)
+	@chmod +x scripts/docker_ctest.sh
+	./scripts/docker_ctest.sh
