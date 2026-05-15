@@ -1,0 +1,34 @@
+# MMTP — **DU_length** (16 bits) for ISOBMFF-mode aggregation (ISO/IEC 23008-1
+# MMTP payload, Figure 3 / normative text). Present **only** when
+# **aggregation_flag** (**A**) in `mmtp_payload_isobmff_prefix` is **1**;
+# one **DU_length** precedes each aggregated data unit (**DU_Header** + body).
+# Semantics: length in bytes of the octets **following** this 16-bit field for
+# that data unit (i.e. **DU_Header** + media payload for the unit).
+#
+# This YAML models **only** the halfword. Repeat on the wire per aggregated DU.
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_payload_isobmff_du_length16
+  proto_id: 15
+  spec: "ISO/IEC 23008-1 (MMTP ISOBMFF-mode DU_length)"
+  description: "MMTP ISOBMFF — 16-bit DU_length (bytes following this field)"
+
+header:
+  total_bits: 16
+  fields:
+    - { name: bytes_following_this_field, bit_offset: 0, bit_width: 16, type: uint }
+
+fixtures:
+  - name: zero
+    description: "DU_length=0 (header only for that DU)"
+    raw_hex: "00 00"
+    expected:
+      bytes_following_this_field: 0
+
+  - name: du_with_timed_header
+    description: "14 bytes follow = timed DU header (112b) only, no media"
+    raw_hex: "00 0E"
+    expected:
+      bytes_following_this_field: 14

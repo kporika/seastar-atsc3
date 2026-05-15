@@ -3,7 +3,8 @@
 // Two-stage encoder pipeline used by the gateway:
 //
 //   raw payload bytes
-//       │  optional M8: prepend RFC 5651 word‑0 (see prepend_rfc5651_lct_word0)
+//       │  optional M8: prepend ISO/IEC 23008-1 MMTP packet header word‑0
+//       │  (see prepend_mmtp_header_word0), then optional RFC 5651 LCT word‑0
 //       ▼
 //   ┌─────────────────────┐
 //   │  ALP encode         │  packet_type = PACKET_TYPE_EXTENSION (default)
@@ -20,7 +21,10 @@
 //   wire bytes (handed to sink)
 //
 // Limits:
-//   * Without LCT prepend: opaque payload ≤ 2047 bytes (ALP 11-bit length).
+//   * Without any prepend: opaque payload ≤ 2047 bytes (ALP 11-bit length).
+//   * With prepend_mmtp_header_word0: ALP opaque = MMTP word‑0 (32b) ∪ user
+//     (≤ 2043 user bytes). May be combined with LCT lab prefix below (prefix
+//     order on the wire: **MMTP word‑0**, then **LCT** + optional TSI/TOI).
 //   * With prepend_rfc5651_lct_word0: ALP opaque = word‑0 (32b) ∪ optional RFC
 //     reorder fields ∪ user ≤ 2047 total (**CCI omitted** lab stitch).
 //     · word‑0 only (`header_length_words == 1`): ≤ 2043 user.
@@ -46,6 +50,7 @@
 
 #include "alp_types.h"
 #include "lct_rfc5651_word0_decoder.h"
+#include "mmtp_header_word0_decoder.h"
 #include "tlv_mux_types.h"
 
 namespace atsc3::gw {
@@ -57,6 +62,13 @@ public:
             atsc3::alp::packet_type::PACKET_TYPE_EXTENSION;
         atsc3::tlv_mux::packet_type tlv_type =
             atsc3::tlv_mux::packet_type::SIGNALING;
+
+        /// M8 lab: prepend MMTP packet header **word‑0** (32b, `protocol/mmtp_header_word0.yaml`)
+        /// before ingress inside the ALP opaque body. Encoded with codegen
+        /// **`mmtp_header_word0::encode`**; may precede the LCT lab prefix when both
+        /// flags are set.
+        bool prepend_mmtp_header_word0 = false;
+        atsc3::mmtp_header_word0::decoded_t mmtp_word0{};
 
         /// M8 lab: prepend RFC 5651 §5.1 fixed fields before ingress in the ALP
         /// opaque body (**no CCI** extension — `header_length_words` counts trailing
@@ -99,6 +111,27 @@ public:
 private:
     config _cfg;
 };
+
+/// MMTP word‑0 only (defaults: V=0, C=0, FEC=0, no X/R extensions, **payload_type**
+/// and **packet_id** supplied — see `mmtp_header_word0.yaml` fixtures).
+[[nodiscard]] inline encoder_pipeline::config with_prepended_lab_mmtp_word0(
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    encoder_pipeline::config base = {}) noexcept {
+    base.prepend_mmtp_header_word0 = true;
+    auto& m                        = base.mmtp_word0;
+    m.mmtp_version                 = 0;
+    m.packet_counter_flag          = false;
+    m.fec_type                     = 0;
+    m.reserved_r                   = 0;
+    m.extension_flag               = false;
+    m.rap_flag                     = false;
+    m.reserved_two                 = 0;
+    m.payload_type =
+        (payload_type > 63u) ? static_cast<std::uint8_t>(63) : payload_type;
+    m.packet_id = packet_id;
+    return base;
+}
 
 /// Wire pattern follows `minimal_v1_c0` in `protocol/lct_rfc5651_word0.yaml`
 /// (`header_length_words = 1` ⇒ word‑0 only).

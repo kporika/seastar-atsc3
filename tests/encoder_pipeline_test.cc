@@ -27,6 +27,7 @@
 #include "alp_types.h"
 #include "encoder_pipeline.h"
 #include "lct_rfc5651_word0_decoder.h"
+#include "mmtp_header_word0_decoder.h"
 #include "tlv_mux_decoder.h"
 #include "tlv_mux_types.h"
 
@@ -180,6 +181,127 @@ int run_lct_prefix(const char *label, std::uint8_t cp,
     std::printf(
         "[%s] OK (user=%zu wire=%zu cp=%u)\n", label, payload.size(),
         wire.bytes.size(), static_cast<unsigned>(cp));
+    return 0;
+}
+
+int run_mmtp_prefix(const char *label, std::uint8_t payload_type,
+                    std::uint16_t packet_id,
+                    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline enc{
+        atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body = alp.value.payload;
+    if (body.size() != payload.size() + 4u) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), payload.size() + 4u);
+        return 1;
+    }
+
+    auto mh = atsc3::mmtp_header_word0::decode(body.subspan(0, 4));
+    if (!mh.ok) {
+        std::fprintf(stderr, "[%s] mmtp word0 decode failed: %s\n",
+                     label, mh.error.c_str());
+        return 1;
+    }
+    if (mh.value.payload_type != payload_type ||
+        mh.value.packet_id != packet_id) {
+        std::fprintf(stderr,
+                     "[%s] mmtp header mismatch: type=%u id=%u (want %u %u)\n",
+                     label, static_cast<unsigned>(mh.value.payload_type),
+                     static_cast<unsigned>(mh.value.packet_id),
+                     static_cast<unsigned>(payload_type),
+                     static_cast<unsigned>(packet_id));
+        return 1;
+    }
+    if (!span_equal(body.subspan(4),
+                    std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] payload tail mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_then_lct(const char *label, std::uint8_t mmtp_pt,
+                      std::uint16_t mmtp_pid, std::uint8_t lct_cp,
+                      const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline enc{atsc3::gw::with_prepended_lab_mmtp_word0(
+        mmtp_pt, mmtp_pid, atsc3::gw::with_prepended_lab_lct_word0(lct_cp))};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body = alp.value.payload;
+    if (body.size() != payload.size() + 8u) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), payload.size() + 8u);
+        return 1;
+    }
+
+    auto mh = atsc3::mmtp_header_word0::decode(body.subspan(0, 4));
+    if (!mh.ok || mh.value.payload_type != mmtp_pt ||
+        mh.value.packet_id != mmtp_pid) {
+        std::fprintf(stderr, "[%s] mmtp prefix mismatch\n", label);
+        return 1;
+    }
+    auto lct = atsc3::lct_rfc5651_word0::decode(body.subspan(4, 4));
+    if (!lct.ok || lct.value.codepoint != lct_cp) {
+        std::fprintf(stderr, "[%s] lct after mmtp mismatch\n", label);
+        return 1;
+    }
+    if (!span_equal(body.subspan(8),
+                    std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] payload tail mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
     return 0;
 }
 
@@ -465,6 +587,19 @@ int main() {
             std::printf("[oversize-2048] OK (rejected: %s)\n",
                         r.error.c_str());
         }
+    }
+
+    // 6b) MMTP packet header word‑0 lab prefix (M8; ISO/IEC 23008-1 Figure 1)
+    {
+        std::vector<std::byte> p{std::byte{0x01}, std::byte{0x02}};
+        failures += run_mmtp_prefix("mmtp-word0-signalling", 2, 0x10u, p);
+        failures += run_mmtp_prefix("mmtp-word0-isobmff", 0, 1u,
+                                    std::vector<std::byte>{});
+    }
+    // 6c) MMTP word‑0 then RFC 5651 LCT word‑0 (gw stitch order)
+    {
+        std::vector<std::byte> p{std::byte{0xCC}};
+        failures += run_mmtp_then_lct("mmtp-then-lct", 2, 0x0010u, 9u, p);
     }
 
     // 7) RFC 5651 word-0 lab prefix rides inside ALP (M8 stitch)

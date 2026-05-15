@@ -85,7 +85,17 @@ int main(int argc, char** argv) {
          "(header_length_words=2 alone, or =3 combined with --lct-include-tsi)")
         ("lct-toi",
          bpo::value<std::uint32_t>()->default_value(0),
-         "when --prepend-lct-word0 and --lct-include-toi: Transport Object Id");
+         "when --prepend-lct-word0 and --lct-include-toi: Transport Object Id")
+        ("prepend-mmtp-word0",
+         bpo::bool_switch()->default_value(false),
+         "M8 lab: prepend ISO/IEC 23008-1 MMTP packet header word-0 before ALP "
+         "(before optional --prepend-lct-word0; see protocol/mmtp_header_word0.yaml)")
+        ("mmtp-payload-type",
+         bpo::value<unsigned>()->default_value(2),
+         "when --prepend-mmtp-word0: MMTP payload_type field (0-63)")
+        ("mmtp-packet-id",
+         bpo::value<unsigned>()->default_value(1),
+         "when --prepend-mmtp-word0: MMTP packet_id (0-65535)");
 
     return app.run(argc, argv, [&app]() -> seastar::future<int> {
         auto& cfg = app.configuration();
@@ -98,6 +108,9 @@ int main(int argc, char** argv) {
         const unsigned cp_in = cfg["lct-codepoint"].as<unsigned>();
         const std::uint32_t lct_tsi = cfg["lct-tsi"].as<std::uint32_t>();
         const std::uint32_t lct_toi = cfg["lct-toi"].as<std::uint32_t>();
+        const bool prepend_mmtp = cfg["prepend-mmtp-word0"].as<bool>();
+        const unsigned mmtp_pt_in = cfg["mmtp-payload-type"].as<unsigned>();
+        const unsigned mmtp_pid_in = cfg["mmtp-packet-id"].as<unsigned>();
         if (!prepend_lct && cp_in != 0u) {
             mlog.error("--lct-codepoint is only meaningful with --prepend-lct-word0");
             co_return 2;
@@ -108,6 +121,14 @@ int main(int argc, char** argv) {
         }
         if (!prepend_lct && lct_include_toi) {
             mlog.error("--lct-include-toi requires --prepend-lct-word0");
+            co_return 2;
+        }
+        if (prepend_mmtp && mmtp_pt_in > 63u) {
+            mlog.error("--mmtp-payload-type must be <= 63");
+            co_return 2;
+        }
+        if (prepend_mmtp && mmtp_pid_in > 65535u) {
+            mlog.error("--mmtp-packet-id must be <= 65535");
             co_return 2;
         }
         if (cp_in > std::numeric_limits<std::uint8_t>::max()) {
@@ -129,6 +150,11 @@ int main(int argc, char** argv) {
                 enc_cfg = atsc3::gw::with_prepended_lab_lct_word0(
                     static_cast<std::uint8_t>(cp_in));
             }
+        }
+        if (prepend_mmtp) {
+            enc_cfg = atsc3::gw::with_prepended_lab_mmtp_word0(
+                static_cast<std::uint8_t>(mmtp_pt_in),
+                static_cast<std::uint16_t>(mmtp_pid_in), std::move(enc_cfg));
         }
 
         atsc3::gw::gw_config gcfg{
@@ -187,11 +213,15 @@ int main(int argc, char** argv) {
         }
 
         mlog.info(
-            "atsc3_gw ready: ingress={} sink={} prepend_lct_word0={} "
+            "atsc3_gw ready: ingress={} sink={} prepend_mmtp_word0={} "
+            "mmtp_payload_type={} mmtp_packet_id={} prepend_lct_word0={} "
             "lct_codepoint={} lct_include_tsi={} lct_tsi={} lct_include_toi={} "
             "lct_toi={} admin_http={} services_state={} smp={}",
             gcfg.ingress_addr,
             gcfg.sink_uri,
+            prepend_mmtp ? "yes" : "no",
+            static_cast<unsigned>(gcfg.encoder.mmtp_word0.payload_type),
+            static_cast<unsigned>(gcfg.encoder.mmtp_word0.packet_id),
             prepend_lct ? "yes" : "no",
             static_cast<unsigned>(gcfg.encoder.lct_word0.codepoint),
             prepend_lct && gcfg.encoder.lct_word0.tsi_flag ? "yes" : "no",

@@ -121,6 +121,17 @@ public:
         return _enc.encoder_config().lct_transport_object_identifier;
     }
 
+    /// True when MMTP packet header word‑0 is prepended before optional LCT (M8 lab).
+    bool encoder_prepends_mmtp_word0() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_header_word0;
+    }
+    std::uint8_t encoder_mmtp_payload_type() const noexcept {
+        return _enc.encoder_config().mmtp_word0.payload_type;
+    }
+    std::uint16_t encoder_mmtp_packet_id() const noexcept {
+        return _enc.encoder_config().mmtp_word0.packet_id;
+    }
+
     // Admin HTTP GET/POST /services — state kept on shard 0 only.
     std::vector<admin_service_entry> list_admin_services() const;
     const admin_service_entry* find_admin_service(std::uint32_t id) const noexcept;

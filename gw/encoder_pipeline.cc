@@ -7,6 +7,7 @@
 #include "alp_decoder.h"
 #include "alp_encoder.h"
 #include "lct_rfc5651_word0_encoder.h"
+#include "mmtp_header_word0_encoder.h"
 #include "tlv_mux_decoder.h"
 #include "tlv_mux_encoder.h"
 
@@ -17,6 +18,8 @@ constexpr std::size_t k_alp_max_payload    = (1u << 11) - 1;  // 11-bit length
 constexpr std::size_t k_tlv_mux_max_packet = (1u << 16) - 1;  // 16-bit length
 constexpr std::size_t k_rfc5651_word0_octets =
     sizeof(std::uint32_t);  // codegen header is fixed 32 bits
+constexpr std::size_t k_mmtp_word0_octets =
+    sizeof(std::uint32_t);  // MMTP packet header word‑0
 
 inline void append_u32_be(std::vector<std::byte>* out, std::uint32_t x) noexcept {
     out->push_back(static_cast<std::byte>((x >> 24) & 0xFF));
@@ -30,63 +33,84 @@ encoder_pipeline::result encoder_pipeline::encode(
     std::span<const std::byte> payload) const {
     result r;
 
-    std::vector<std::byte> prefixed;
+    std::optional<std::vector<std::byte>> alp_storage;
     std::span<const std::byte> alp_body = payload;
-    if (_cfg.prepend_rfc5651_lct_word0) {
-        const auto& w = _cfg.lct_word0;
-        enum class lab_prefix_mode { none, tsi_word32, toi_o1_word32,
-                                    tsi_then_toi_o1_word64 };
 
-        lab_prefix_mode mode;
-        if (!w.tsi_flag && w.toi_flag == 0) {
-            if (w.header_length_words != 1) {
-                r.error =
-                    "encoder_pipeline: LCT lab (word‑0 only) requires "
-                    "header_length_words==1";
+    const bool want_mmtp = _cfg.prepend_mmtp_header_word0;
+    const bool want_lct  = _cfg.prepend_rfc5651_lct_word0;
+
+    if (want_mmtp || want_lct) {
+        alp_storage.emplace();
+        std::vector<std::byte>& buf = *alp_storage;
+
+        if (want_mmtp) {
+            auto mmtp = atsc3::mmtp_header_word0::encode(_cfg.mmtp_word0);
+            if (!mmtp.ok || mmtp.bytes.size() != k_mmtp_word0_octets) {
+                r.error = "encoder_pipeline: MMTP header word0 encode failed";
                 return r;
             }
-            mode = lab_prefix_mode::none;
-        } else if (w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
-                   w.header_length_words == 3) {
-            mode = lab_prefix_mode::tsi_then_toi_o1_word64;
-        } else if (w.tsi_flag && w.toi_flag == 0 && !w.half_word_flag &&
-                   w.header_length_words == 2) {
-            mode = lab_prefix_mode::tsi_word32;
-        } else if (!w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
-                   w.header_length_words == 2) {
-            mode = lab_prefix_mode::toi_o1_word32;
+            buf.insert(buf.end(), mmtp.bytes.begin(), mmtp.bytes.end());
+        }
+
+        if (want_lct) {
+            const auto& w = _cfg.lct_word0;
+            enum class lab_prefix_mode { none, tsi_word32, toi_o1_word32,
+                                        tsi_then_toi_o1_word64 };
+
+            lab_prefix_mode mode;
+            if (!w.tsi_flag && w.toi_flag == 0) {
+                if (w.header_length_words != 1) {
+                    r.error =
+                        "encoder_pipeline: LCT lab (word‑0 only) requires "
+                        "header_length_words==1";
+                    return r;
+                }
+                mode = lab_prefix_mode::none;
+            } else if (w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
+                       w.header_length_words == 3) {
+                mode = lab_prefix_mode::tsi_then_toi_o1_word64;
+            } else if (w.tsi_flag && w.toi_flag == 0 && !w.half_word_flag &&
+                       w.header_length_words == 2) {
+                mode = lab_prefix_mode::tsi_word32;
+            } else if (!w.tsi_flag && w.toi_flag == 1 && !w.half_word_flag &&
+                       w.header_length_words == 2) {
+                mode = lab_prefix_mode::toi_o1_word32;
+            } else {
+                r.error =
+                    "encoder_pipeline: unsupported LCT lab prefix (supports word‑0; "
+                    "word‑0+32b TSI; word‑0+32b TOI with O==1; "
+                    "word‑0+32b TSI+32b TOI with O==1, header_length_words==3)";
+                return r;
+            }
+
+            auto lct = atsc3::lct_rfc5651_word0::encode(w);
+            if (!lct.ok || lct.bytes.size() != k_rfc5651_word0_octets) {
+                r.error = "encoder_pipeline: LCT word0 encode failed";
+                return r;
+            }
+
+            const std::size_t extra =
+                (mode == lab_prefix_mode::none)
+                    ? 0
+                    : (mode == lab_prefix_mode::tsi_then_toi_o1_word64
+                           ? sizeof(std::uint32_t) * 2
+                           : sizeof(std::uint32_t));
+            buf.reserve(buf.size() + lct.bytes.size() + extra + payload.size());
+            buf.insert(buf.end(), lct.bytes.begin(), lct.bytes.end());
+            if (mode == lab_prefix_mode::tsi_word32) {
+                append_u32_be(&buf, _cfg.lct_transport_session_identifier);
+            } else if (mode == lab_prefix_mode::toi_o1_word32) {
+                append_u32_be(&buf, _cfg.lct_transport_object_identifier);
+            } else if (mode == lab_prefix_mode::tsi_then_toi_o1_word64) {
+                append_u32_be(&buf, _cfg.lct_transport_session_identifier);
+                append_u32_be(&buf, _cfg.lct_transport_object_identifier);
+            }
         } else {
-            r.error =
-                "encoder_pipeline: unsupported LCT lab prefix (supports word‑0; "
-                "word‑0+32b TSI; word‑0+32b TOI with O==1; "
-                "word‑0+32b TSI+32b TOI with O==1, header_length_words==3)";
-            return r;
+            buf.reserve(buf.size() + payload.size());
         }
 
-        auto lct = atsc3::lct_rfc5651_word0::encode(w);
-        if (!lct.ok || lct.bytes.size() != k_rfc5651_word0_octets) {
-            r.error = "encoder_pipeline: LCT word0 encode failed";
-            return r;
-        }
-
-        const std::size_t extra =
-            (mode == lab_prefix_mode::none)
-                ? 0
-                : (mode == lab_prefix_mode::tsi_then_toi_o1_word64
-                       ? sizeof(std::uint32_t) * 2
-                       : sizeof(std::uint32_t));
-        prefixed.reserve(lct.bytes.size() + extra + payload.size());
-        prefixed.insert(prefixed.end(), lct.bytes.begin(), lct.bytes.end());
-        if (mode == lab_prefix_mode::tsi_word32) {
-            append_u32_be(&prefixed, _cfg.lct_transport_session_identifier);
-        } else if (mode == lab_prefix_mode::toi_o1_word32) {
-            append_u32_be(&prefixed, _cfg.lct_transport_object_identifier);
-        } else if (mode == lab_prefix_mode::tsi_then_toi_o1_word64) {
-            append_u32_be(&prefixed, _cfg.lct_transport_session_identifier);
-            append_u32_be(&prefixed, _cfg.lct_transport_object_identifier);
-        }
-        prefixed.insert(prefixed.end(), payload.begin(), payload.end());
-        alp_body = prefixed;
+        buf.insert(buf.end(), payload.begin(), payload.end());
+        alp_body = std::span<const std::byte>(buf.data(), buf.size());
     }
 
     // -------- 1) ALP encode -------------------------------------------------
@@ -95,9 +119,8 @@ encoder_pipeline::result encoder_pipeline::encode(
                   std::to_string(alp_body.size()) +
                   " > ALP 11-bit max " +
                   std::to_string(k_alp_max_payload) +
-                  (_cfg.prepend_rfc5651_lct_word0
-                       ? " (includes RFC 5651 LCT lab prefix above ingress; shrink "
-                         "ingress)"
+                  ((want_mmtp || want_lct)
+                       ? " (includes lab prefix(es) before ingress; shrink ingress)"
                        : "");
         return r;
     }

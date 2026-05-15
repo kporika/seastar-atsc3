@@ -45,6 +45,9 @@ struct GwHttpAdminConfigSnap {
     std::uint32_t lct_tsi = 0;
     bool lct_include_toi = false;
     std::uint32_t lct_toi = 0;
+    bool prepend_mmtp_word0 = false;
+    std::uint8_t mmtp_payload_type = 0;
+    std::uint16_t mmtp_packet_id = 0;
 };
 
 inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
@@ -58,6 +61,9 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
     o.lct_tsi               = s.encoder_lct_tsi();
     o.lct_include_toi       = s.encoder_lct_includes_toi();
     o.lct_toi               = s.encoder_lct_toi();
+    o.prepend_mmtp_word0    = s.encoder_prepends_mmtp_word0();
+    o.mmtp_payload_type     = s.encoder_mmtp_payload_type();
+    o.mmtp_packet_id        = s.encoder_mmtp_packet_id();
     return o;
 }
 
@@ -376,6 +382,12 @@ public:
         w.Bool(snap.lct_include_toi);
         w.Key("lct_toi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
+        w.Key("prepend_mmtp_word0");
+        w.Bool(snap.prepend_mmtp_word0);
+        w.Key("mmtp_payload_type");
+        w.Uint(static_cast<unsigned>(snap.mmtp_payload_type));
+        w.Key("mmtp_packet_id");
+        w.Uint(static_cast<unsigned>(snap.mmtp_packet_id));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");
@@ -524,6 +536,12 @@ public:
         w.Bool(snap.lct_include_toi);
         w.Key("lct_toi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
+        w.Key("prepend_mmtp_word0");
+        w.Bool(snap.prepend_mmtp_word0);
+        w.Key("mmtp_payload_type");
+        w.Uint(static_cast<unsigned>(snap.mmtp_payload_type));
+        w.Key("mmtp_packet_id");
+        w.Uint(static_cast<unsigned>(snap.mmtp_packet_id));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");

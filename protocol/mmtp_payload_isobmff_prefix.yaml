@@ -7,8 +7,9 @@
 # **T** (1b), **f_i** (2b), **A** (1b), **frag_counter** (8b), then
 # **sequence_number** (32b).
 #
-# Follow-on slices (not in this YAML): when **A**=**1**, **DU_length** (16b)
-# repeats per aggregated data unit. **DU_Header** for **FT**=**2**:
+# Follow-on slices (not in this YAML): when **A**=**1**, **`mmtp_payload_isobmff_du_length16.yaml`**
+# repeats per aggregated data unit (then **DU_Header** + body per unit).
+# **DU_Header** for **FT**=**2**:
 # **`mmtp_payload_isobmff_du_header_timed.yaml`** (**T**=**1**) or
 # **`mmtp_payload_isobmff_du_header_non_timed.yaml`** (**T**=**0**). **FT** 0–1
 # carry no DU header — opaque box data follows **sequence_number**.

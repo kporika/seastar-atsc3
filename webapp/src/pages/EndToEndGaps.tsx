@@ -222,7 +222,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "MMTP packetizer + signaling msgs",
         status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_header timed/non-timed (FT=2); gfd_header (type 0x01); MFU/PA/MPI/MPT payload modes + signalling payload header + gw prefix + multi-ext assembly + DU_length (A=1) still missing",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_length16 (A=1) + du_header timed/non-timed (FT=2); gfd_header (type 0x01); gw --prepend-mmtp-word0 (word-0 before optional LCT); MFU/PA/MPI/MPT payload modes + signalling payload header (0x02) + gw ts_psn/extension stitch + multi-ext assembly still missing",
     },
     {
         layer: "Transport",
@@ -418,14 +418,14 @@ const ROADMAP: ReadonlyArray<{
         blurb:
             "Move from opaque length-framed payloads to real broadcast-shaped traffic. " +
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
-            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab). " +
+            "LCT starts with protocol/lct_rfc5651_word0.yaml (RFC 5651 first header word); atsc3_gw --prepend-lct-word0 inside ALP; optional BE32 TSI via --lct-include-tsi, optional O=1 TOI via --lct-include-toi, or both (TSI then TOI, hdr_len_words=3, max user 2035 octets lab); --prepend-mmtp-word0 adds MMTP packet header word-0 before optional LCT. " +
             "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: DU_length (A=1) + signalling payload header (type 0x02) + gw MMTP prefix.",
+            "ALP encapsulation already accepts opaque payloads. Next: MMTP signalling payload header YAML (type 0x02); optional gw ts_psn + mmt_probe strip/verify parity.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
             "ROUTE/LCT packetizer (partial: LCT header word-0 YAML + optional TSI/TOI bytes in gw)",
-            "MMTP packetizer (partial: mmtp_header_* + mmtp_desc)",
+            "MMTP packetizer (partial: mmtp_header_* + mmtp_desc + gw --prepend-mmtp-word0)",
             "Raptor10/RaptorQ FEC",
         ],
     },
@@ -625,7 +625,7 @@ export default function EndToEndGaps() {
                             "TCP length-prefix ingress: [u32 BE length] [payload]",
                             "Per-shard SO_REUSEPORT load balancing on the listen socket",
                             "RTCM v3 frames as a special-case payload via mmt_probe --rtcm-file",
-                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi and/or --lct-include-toi --lct-toi), optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
+                            "Optional HTTP admin (--admin-http): POST /ingest, GET /config, POST /config/sink + PATCH/PUT /config (mutating body is {\"sink_uri\"} only), GET/POST/DELETE /services, optional --prepend-lct-word0 (--lct-codepoint; optional --lct-include-tsi --lct-tsi and/or --lct-include-toi --lct-toi), optional --prepend-mmtp-word0 (--mmtp-payload-type, --mmtp-packet-id), optional --services-state-file JSON persistence, GET /healthz, /readyz, /metrics; Operator tab in webapp (npm run dev) via Vite proxy /__atsc3_admin; tools/atsc3ctl.py for shell automation",
                         ]}
                     />
                     <BulletGroup
@@ -642,8 +642,8 @@ export default function EndToEndGaps() {
                             "tools/codegen.py reads protocol/*.yaml → C++ types/decoder/encoder/JSON",
                             "Recursive nested support via repeated: (M6) — see tlv_mux_frame.yaml",
                             "MSB-first bit reader/writer in lib/runtime/",
-                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi / --lct-include-toi / both)",
-                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X); mmtp_payload_isobmff_prefix.yaml; du_header_{timed,non_timed}.yaml; mmtp_payload_gfd_header.yaml (type 0x01)",
+                            "lib/runtime/ipv4_udp.{hh,cc} — M8 encapsulation + checksums; ipv4udp-file:// sink in gw/sink.cc; protocol/lct_rfc5651_word0.yaml (RFC 5651 LCT word 0 + optional BE32 --lct-include-tsi / --lct-include-toi / both); gw --prepend-mmtp-word0 before optional LCT",
+                            "protocol/mmtp_header_word0.yaml — word 0; ts_psn; counter32 (C=1); mmtp_header_extension.yaml (X); mmtp_payload_isobmff_prefix.yaml; mmtp_payload_isobmff_du_length16.yaml; du_header_{timed,non_timed}.yaml; mmtp_payload_gfd_header.yaml (type 0x01)",
                             "M9: lls_table6_1.hh + tools/m9_lls_pack.py + fixtures/lls/minimal_slt.xml",
                         ]}
                     />
@@ -651,7 +651,7 @@ export default function EndToEndGaps() {
                         title="Test harness"
                         items={[
                             "Per-protocol fixture round-trip tests (auto-generated)",
-                            "tools/smoke/codec_smoke.py — pure-Python golden checks (41 cases)",
+                            "tools/smoke/codec_smoke.py — pure-Python golden checks (43 cases)",
                             "scripts/integration_test.sh — gw + mmt_probe loopback in 1 process",
                             "scripts/udp_integration_test.sh — same payloads via udp:// + Python UDP concat",
                             "scripts/ipv4udp_file_integration_test.sh — ipv4udp-file:// + m8 strip + verify",
