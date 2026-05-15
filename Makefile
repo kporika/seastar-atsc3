@@ -11,6 +11,7 @@
 #   make integ-all          # all host integ scripts (RTCM 12×96)
 #   make integ-stltp       # stltp:// lab UDP + strip + verify
 #   make integ-lct-word0    # gw --prepend-lct-word0 + mmt_probe verify strip
+#   make integ-mmtp-word0   # gw --prepend-mmtp-word0 (+ optional LCT) + mmt_probe strip
 #   make integ-lls         # lls:// Table 6.1 + gzip UDP + Python validate
 #
 # Quick start (zero local deps; everything runs in Docker):
@@ -23,6 +24,7 @@
 #   make image-integ-udp    # udp:// in the image
 #   make image-integ-admin  # PATCH /config in the image (needs python3)
 #   make image-integ-lct-word0 # M8 LCT word-0 prefix path in the image
+#   make image-integ-mmtp-word0 # M8 MMTP word-0 (+ optional LCT) in the image
 #   make image-integ-all    # full suite in the image (incl. RTCM 12×96)
 #   make image-integ-rtcm   # RTCM path only (12×96) in the image
 #   make image-integ-stltp     # STLTP lab UDP integration in the image
@@ -45,8 +47,8 @@ APP_DOCKERFILE  := Dockerfile.app
 # the next `make image`.
 DEPS_STAMP     := .make/deps.stamp
 
-.PHONY: default build codegen clean lint smoke integ integ-udp integ-ipv4udp integ-stltp integ-lct-word0 integ-lls integ-rtcm integ-admin integ-all \
-        deps image image-fast docker-build docker-ctest image-integ image-integ-udp image-integ-ipv4udp image-integ-stltp image-integ-lct-word0 image-integ-lls image-integ-rtcm image-integ-admin image-integ-all run image-shell deps-shell
+.PHONY: default build codegen clean lint smoke integ integ-udp integ-ipv4udp integ-stltp integ-lct-word0 integ-mmtp-word0 integ-lls integ-rtcm integ-admin integ-all \
+        deps image image-fast docker-build docker-ctest image-integ image-integ-udp image-integ-ipv4udp image-integ-stltp image-integ-lct-word0 image-integ-mmtp-word0 image-integ-lls image-integ-rtcm image-integ-admin image-integ-all run image-shell deps-shell
 
 default: build
 
@@ -87,6 +89,10 @@ integ-stltp:
 # gw --prepend-lct-word0 + verify --strip-lct-word0 (M8 RFC 5651 word-0 inside ALP).
 integ-lct-word0:
 	./scripts/lct_word0_integration_test.sh
+
+# gw --prepend-mmtp-word0 (+ optional LCT) + mmt_probe verify --strip-mmtp-word0.
+integ-mmtp-word0:
+	./scripts/mmtp_word0_integration_test.sh
 
 # lls:// sink: cleartext XML → Table 6.1 + gzip UDP (Python validates one datagram).
 integ-lls:
@@ -158,10 +164,13 @@ image-integ-admin: image
 image-integ-lct-word0: image
 	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/lct_word0_integration_test.sh $(APP_IMAGE)
 
+image-integ-mmtp-word0: image
+	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/mmtp_word0_integration_test.sh $(APP_IMAGE)
+
 # Full integration suite (same order as CI; RTCM uses 12×96).
 image-integ-all: image
 	set -e; \
-	for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh m7_operator_integration_test.sh lct_word0_integration_test.sh; do \
+	for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh m7_operator_integration_test.sh lct_word0_integration_test.sh mmtp_word0_integration_test.sh; do \
 		echo ">>> $$s"; \
 		$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/$$s $(APP_IMAGE); \
 	done; \

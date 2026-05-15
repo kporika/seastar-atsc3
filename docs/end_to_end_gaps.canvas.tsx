@@ -226,7 +226,7 @@ const GAPS: ReadonlyArray<GapRow> = [
         component: "MMTP packetizer + signaling msgs",
         status: "in-flight",
         notes:
-            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_length16 (A=1) + du_header timed/non-timed (FT=2); gfd_header (type 0x01); gw --prepend-mmtp-word0 (word-0 before optional LCT); MFU/PA/MPI/MPT payload modes + signalling payload header (0x02) + gw ts_psn/extension stitch + multi-ext assembly still missing",
+            "mmtp_desc + mmtp_desc_loop = Annex A.5 TLVs; mmtp_header_word0 + ts_psn + counter32 + extension (ISO/IEC 23008-1; one extension TLV per YAML); isobmff_prefix + du_length16 (A=1) + du_header timed/non-timed (FT=2); gfd_header (type 0x01); gw --prepend-mmtp-word0 (word-0 before optional LCT); mmt_probe verify --strip-mmtp-word0 + scripts/mmtp_word0_integration_test.sh (E/F); MFU/PA/MPI/MPT payload modes + signalling payload header (0x02) + gw ts_psn/extension stitch + multi-ext assembly still missing",
     },
     {
         layer: "Transport",
@@ -433,7 +433,7 @@ const ROADMAP: ReadonlyArray<{
             "UDP/IPv4 is already in C++ (lib/runtime/ipv4_udp + udp:// / ipv4udp-file:// sinks). " +
             "protocol/lct_rfc5651_word0.yaml anchors RFC 5651 first header word; atsc3_gw --prepend-lct-word0 prefixes inside ALP; optional BE32 --lct-include-tsi (--lct-tsi) / --lct-include-toi (--lct-toi); both ⇒ TSI then TOI (hdr_len_words=3, max user 2035 vs 2039 word-0-only + one field vs 2043 word-0-only). --prepend-mmtp-word0 adds MMTP packet header word-0 before optional LCT. " +
             "Full ROUTE/LCT sessions, MMTP payload modes, and Raptor10/RaptorQ FEC remain. " +
-            "ALP encapsulation already accepts opaque payloads. Next: MMTP signalling payload header YAML (type 0x02); optional gw ts_psn + mmt_probe strip/verify parity.",
+            "ALP encapsulation already accepts opaque payloads. Next: MMTP signalling payload header YAML (type 0x02); optional gw ts_psn + mmt_probe peel for ts_psn / multi-X after word-0.",
         unlocks: "Real IP multicast packets ride through ALP+TLV-mux",
         closes: [
             "UDP/IPv4 builder (partial: C++ + sinks)",
@@ -649,8 +649,9 @@ export default function Atsc3EndToEndGaps() {
                             "scripts/stltp_integration_test.sh — stltp:// lab UDP strip + verify",
                             "scripts/lls_integration_test.sh — lls:// Table 6.1 + gzip UDP validate",
                             "scripts/rtcm_integration_test.sh — rtcm-gen → gw → verify --validate-rtcm",
-                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + RTCM 12×96",
-                            "scripts/lct_word0_integration_test.sh — A/B/C: word‑0 · TSI · TOI + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi|--expect-lct-toi]",
+                            "scripts/run_all_integration.sh — sink/LLS/STLTP + admin + M7 + LCT word‑0 + MMTP word‑0 + RTCM 12×96",
+                            "scripts/lct_word0_integration_test.sh — A/B/C/D: word‑0 · TSI · TOI · TSI+TOI + mmt_probe verify --strip-lct-word0 [--expect-lct-tsi|--expect-lct-toi]",
+                            "scripts/mmtp_word0_integration_test.sh — E/F: MMTP word‑0 only · MMTP+LCT + verify --strip-mmtp-word0 [--expect-mmtp-*] + optional --strip-lct-word0",
                             "scripts/admin_patch_config_integration_test.sh — POST /config/sink sink_uri hot-swap",
                             "scripts/m7_operator_integration_test.sh — bearer + PATCH /services + POST /ingest service_id + --services-state-file",
                             ".github/workflows/ci.yml — Python lint + codegen + codec_smoke + webapp npm build (no Docker); C++/integration: make build && make integ* locally; workflow_dispatch",

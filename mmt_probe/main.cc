@@ -23,6 +23,8 @@
 //
 //   verify  --file PATH --expected-payloads HEX[,HEX,...]
 //                       [--validate-rtcm]
+//                       [--strip-mmtp-word0 [--expect-mmtp-payload-type N]
+//                                             [--expect-mmtp-packet-id U16]]]
 //                       [--strip-lct-word0 [--expect-lct-codepoint N]
 //                                            [--expect-lct-tsi U32]
 //                                            [--expect-lct-toi U32]]]
@@ -32,11 +34,17 @@
 //       --validate-rtcm, also CRC-validates each recovered payload as
 //       a stand-alone RTCM v3 frame.
 //
+//       When --strip-mmtp-word0 is set (gateway was run with
+//       --prepend-mmtp-word0), peel the ISO/IEC 23008-1 MMTP packet header
+//       word‑0 (32b) from the front of each ALP opaque body **before** any
+//       --strip-lct-word0 peel (wire order: MMTP, then optional LCT).
+//
 //       When --strip-lct-word0 is set (gateway was run with
 //       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
-//       opaque body. Lab extensions after word‑0: 32‑bit **TSI** (**S**) and/or
-//       (RFC order) **O**=1 **TOI** 32‑bit (`toi_flag` value **1**); match with
-//       --expect-lct-tsi / --expect-lct-toi when asserting values.
+//       opaque body (after optional MMTP peel). Lab extensions after word‑0:
+//       32‑bit **TSI** (**S**) and/or (RFC order) **O**=1 **TOI** 32‑bit
+//       (`toi_flag` value **1**); match with --expect-lct-tsi / --expect-lct-toi
+//       when asserting values.
 //
 //   rtcm-gen --out PATH --frames N [--msg-type T] [--seed S]
 //                                  [--payload-bytes B]
@@ -72,6 +80,7 @@
 
 #include "alp_decoder.h"
 #include "lct_rfc5651_word0_decoder.h"
+#include "mmtp_header_word0_decoder.h"
 #include "tlv_mux_decoder.h"
 
 #include "rtcm_v3.h"
@@ -103,7 +112,8 @@ std::vector<std::byte> hex_to_bytes(std::string_view hex) {
     return out;
 }
 
-constexpr std::size_t k_lct_word0_bytes = sizeof(std::uint32_t);
+constexpr std::size_t k_lct_word0_bytes  = sizeof(std::uint32_t);
+constexpr std::size_t k_mmtp_word0_bytes = sizeof(std::uint32_t);
 
 inline std::uint32_t read_be32(std::span<const std::byte> four) noexcept {
     std::uint32_t x = 0;
@@ -186,6 +196,12 @@ struct opts {
     std::optional<std::uint32_t> expect_lct_tsi;
     /// When set with --strip-lct-word0, compare against the 32-bit TOI peel (O==1).
     std::optional<std::uint32_t> expect_lct_toi;
+    /// Peel MMTP packet header word‑0 (32b) before LCT / payload compare.
+    bool strip_mmtp_word0 = false;
+    /// With --strip-mmtp-word0: require payload_type (0–63).
+    std::optional<std::uint8_t> expect_mmtp_payload_type;
+    /// With --strip-mmtp-word0: require packet_id (0–65535).
+    std::optional<std::uint16_t> expect_mmtp_packet_id;
 };
 
 opts parse_args(int argc, char **argv) {
@@ -224,6 +240,7 @@ opts parse_args(int argc, char **argv) {
         else if (k == "--seed")                o.seed = next_uint();
         else if (k == "--validate-rtcm")       o.validate_rtcm = true;
         else if (k == "--strip-lct-word0")      o.strip_lct_word0 = true;
+        else if (k == "--strip-mmtp-word0")     o.strip_mmtp_word0 = true;
         else if (k == "--expect-lct-codepoint") {
             const auto v = next_uint();
             if (v > 255u) {
@@ -239,6 +256,20 @@ opts parse_args(int argc, char **argv) {
         } else if (k == "--expect-lct-toi") {
             const auto v = next_uint();
             o.expect_lct_toi = static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-payload-type") {
+            const auto v = next_uint();
+            if (v > 63u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-payload-type must be <= 63");
+            }
+            o.expect_mmtp_payload_type = static_cast<std::uint8_t>(v);
+        } else if (k == "--expect-mmtp-packet-id") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-packet-id must be <= 65535");
+            }
+            o.expect_mmtp_packet_id = static_cast<std::uint16_t>(v);
         } else throw std::runtime_error(
             std::string("unknown option: ") + std::string(k));
     }
@@ -427,6 +458,15 @@ int do_verify(const opts &o) {
         std::cerr << "verify: --file is required\n";
         return 2;
     }
+    if (o.expect_mmtp_payload_type.has_value() && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --expect-mmtp-payload-type requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.expect_mmtp_packet_id.has_value() && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --expect-mmtp-packet-id requires --strip-mmtp-word0\n";
+        return 2;
+    }
     if (o.expect_lct_codepoint.has_value() && !o.strip_lct_word0) {
         std::cerr << "verify: --expect-lct-codepoint requires --strip-lct-word0\n";
         return 2;
@@ -466,16 +506,48 @@ int do_verify(const opts &o) {
         }
 
         const auto alp_body = alp.value.payload;
-        std::span<const std::byte> inner(alp_body);
+        std::span<const std::byte> work(alp_body);
+
+        if (o.strip_mmtp_word0) {
+            if (work.size() < k_mmtp_word0_bytes) {
+                std::cerr << "verify: TLV #" << idx << " ALP opaque too short for "
+                             "MMTP word0\n";
+                return 1;
+            }
+            auto mhd = atsc3::mmtp_header_word0::decode(
+                work.subspan(0, k_mmtp_word0_bytes));
+            if (!mhd.ok) {
+                std::cerr << "verify: TLV #" << idx << " MMTP word0 decode: "
+                          << mhd.error << "\n";
+                return 1;
+            }
+            if (o.expect_mmtp_payload_type.has_value() &&
+                *o.expect_mmtp_payload_type != mhd.value.payload_type) {
+                std::cerr << "verify: TLV #" << idx << " MMTP payload_type want "
+                          << static_cast<unsigned>(*o.expect_mmtp_payload_type)
+                          << " got "
+                          << static_cast<unsigned>(mhd.value.payload_type)
+                          << "\n";
+                return 1;
+            }
+            if (o.expect_mmtp_packet_id.has_value() &&
+                *o.expect_mmtp_packet_id != mhd.value.packet_id) {
+                std::cerr << "verify: TLV #" << idx << " MMTP packet_id want "
+                          << *o.expect_mmtp_packet_id << " got "
+                          << mhd.value.packet_id << "\n";
+                return 1;
+            }
+            work = work.subspan(k_mmtp_word0_bytes);
+        }
 
         if (o.strip_lct_word0) {
-            if (alp_body.size() < k_lct_word0_bytes) {
+            if (work.size() < k_lct_word0_bytes) {
                 std::cerr << "verify: TLV #" << idx << " ALP opaque too short for "
                              "LCT word0\n";
                 return 1;
             }
             auto lctd = atsc3::lct_rfc5651_word0::decode(
-                alp_body.subspan(0, k_lct_word0_bytes));
+                work.subspan(0, k_lct_word0_bytes));
             if (!lctd.ok) {
                 std::cerr << "verify: TLV #" << idx << " LCT word0 decode: "
                           << lctd.error << "\n";
@@ -514,13 +586,13 @@ int do_verify(const opts &o) {
                               << " LCT TSI peel but --expect-lct-toi given\n";
                     return 1;
                 }
-                if (alp_body.size() < off + sizeof(std::uint32_t)) {
+                if (work.size() < off + sizeof(std::uint32_t)) {
                     std::cerr << "verify: TLV #" << idx << " truncated TSI after "
                                                                    "word0\n";
                     return 1;
                 }
                 const std::uint32_t got_ts =
-                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                    read_be32(work.subspan(off, sizeof(std::uint32_t)));
                 if (o.expect_lct_tsi.has_value() &&
                     *o.expect_lct_tsi != got_ts) {
                     std::cerr << "verify: TLV #" << idx << " LCT TSI want 0x"
@@ -532,13 +604,13 @@ int do_verify(const opts &o) {
             } else if (lv.tsi_flag && lv.toi_flag == 1 &&
                        !lv.half_word_flag &&
                        lv.header_length_words == 3) {
-                if (alp_body.size() < off + 2 * sizeof(std::uint32_t)) {
+                if (work.size() < off + 2 * sizeof(std::uint32_t)) {
                     std::cerr << "verify: TLV #" << idx
                               << " truncated TSI+TOI after word0\n";
                     return 1;
                 }
                 const std::uint32_t got_ts =
-                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                    read_be32(work.subspan(off, sizeof(std::uint32_t)));
                 if (o.expect_lct_tsi.has_value() &&
                     *o.expect_lct_tsi != got_ts) {
                     std::cerr << "verify: TLV #" << idx << " LCT TSI want 0x"
@@ -548,7 +620,7 @@ int do_verify(const opts &o) {
                 }
                 off += sizeof(std::uint32_t);
                 const std::uint32_t got_toi =
-                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                    read_be32(work.subspan(off, sizeof(std::uint32_t)));
                 if (o.expect_lct_toi.has_value() &&
                     *o.expect_lct_toi != got_toi) {
                     std::cerr << "verify: TLV #" << idx << " LCT TOI want 0x"
@@ -565,13 +637,13 @@ int do_verify(const opts &o) {
                               << " LCT TOI peel but --expect-lct-tsi given\n";
                     return 1;
                 }
-                if (alp_body.size() < off + sizeof(std::uint32_t)) {
+                if (work.size() < off + sizeof(std::uint32_t)) {
                     std::cerr << "verify: TLV #" << idx << " truncated TOI after "
                                                                    "word0\n";
                     return 1;
                 }
                 const std::uint32_t got_toi =
-                    read_be32(alp_body.subspan(off, sizeof(std::uint32_t)));
+                    read_be32(work.subspan(off, sizeof(std::uint32_t)));
                 if (o.expect_lct_toi.has_value() &&
                     *o.expect_lct_toi != got_toi) {
                     std::cerr << "verify: TLV #" << idx << " LCT TOI want 0x"
@@ -596,8 +668,10 @@ int do_verify(const opts &o) {
                 return 1;
             }
 
-            inner = alp_body.subspan(off);
+            work = work.subspan(off);
         }
+
+        const std::span<const std::byte> inner = work;
 
         if (!expected_hex.empty()) {
             if (idx >= expected_hex.size()) {

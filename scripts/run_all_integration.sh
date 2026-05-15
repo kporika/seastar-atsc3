@@ -31,6 +31,7 @@ run lls_integration_test.sh "${build_dir}"
 run admin_patch_config_integration_test.sh "${build_dir}"
 run m7_operator_integration_test.sh "${build_dir}"
 run lct_word0_integration_test.sh "${build_dir}"
+run mmtp_word0_integration_test.sh "${build_dir}"
 # Fewer frames / moderate payload than default 32×128 — still exercises RTCM+CRC path.
 run rtcm_integration_test.sh "${build_dir}" 12 96
 
