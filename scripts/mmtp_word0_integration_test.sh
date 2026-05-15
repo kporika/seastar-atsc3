@@ -7,6 +7,7 @@
 # (N) word-0 + signalling prefix (L=1, A=1) + §9.3.4 aggregated bodies (32b lengths);
 # (O) word-0 (**payload_type**=**0**) + **ISOBMFF** payload prefix (64b Figure 3, **A**=**0**);
 # (P) word-0 + **ISOBMFF** **A**=**1** + **DU_length**+body pairs (**--mmtp-isobmff-aggregate-hex**).
+# (Q) word-0 + **ISOBMFF** **A**=**0** + optional **DU_header** (Fig. 5, **T**=**0**) + verify strip.
 #
 # Usage:
 #   scripts/mmtp_word0_integration_test.sh [BUILD_DIR]
@@ -115,6 +116,7 @@ port_m=$(( ( RANDOM % 10000 ) + 107000 ))
 port_n=$(( ( RANDOM % 10000 ) + 117000 ))
 port_o=$(( ( RANDOM % 10000 ) + 127000 ))
 port_p=$(( ( RANDOM % 10000 ) + 137000 ))
+port_q=$(( ( RANDOM % 10000 ) + 147000 ))
 
 echo "[mmtp_word0_integ] phase E: MMTP word-0 only (payload_type=${mmtp_pt} packet_id=${mmtp_pid})"
 run_phase "E" "${port_e}" "${tmpdir}/e.out" "${tmpdir}/gw_e.log" \
@@ -372,6 +374,34 @@ run_phase "P" "${port_p}" "${tmpdir}/p.out" "${tmpdir}/gw_p.log" \
     --expect-mmtp-isobmff-sequence-number "${mmtp_iso_seq}" \
     --expect-mmtp-isobmff-aggregate-hex AABB \
     --expect-mmtp-isobmff-aggregate-hex CC \
+    --expected-payloads "${payloads}"
+
+echo "[mmtp_word0_integ] phase Q: MMTP word-0 + ISOBMFF (**T**=**0**) + **DU_header** + verify strip"
+run_phase "Q" "${port_q}" "${tmpdir}/q.out" "${tmpdir}/gw_q.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 0 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-isobmff-prefix \
+    --mmtp-isobmff-fragment-type 2 \
+    --mmtp-isobmff-fragmentation 0 \
+    --mmtp-isobmff-fragment-counter 0 \
+    --mmtp-isobmff-sequence-number "${mmtp_iso_seq}" \
+    --prepend-mmtp-isobmff-du-header \
+    --mmtp-isobmff-du-item-id "${mmtp_ts}"
+"${probe_bin}" verify \
+    --file "${tmpdir}/q.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 0 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-isobmff-prefix \
+    --expect-mmtp-isobmff-fragment-type 2 \
+    --expect-mmtp-isobmff-timed 0 \
+    --expect-mmtp-isobmff-fragmentation 0 \
+    --expect-mmtp-isobmff-aggregation 0 \
+    --expect-mmtp-isobmff-fragment-counter 0 \
+    --expect-mmtp-isobmff-sequence-number "${mmtp_iso_seq}" \
+    --strip-mmtp-isobmff-du-header \
+    --expect-mmtp-isobmff-du-item-id "${mmtp_ts}" \
     --expected-payloads "${payloads}"
 
 echo "[mmtp_word0_integ] PASS"

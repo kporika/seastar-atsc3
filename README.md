@@ -92,7 +92,7 @@ atsc3_proto/
 ├── scripts/
 │   ├── _lib.sh               # resolve_bin + detect_default_build_dir (integration scripts)
 │   ├── lct_word0_integration_test.sh  # gw --prepend-lct-word0 + verify --strip-lct-word0 (M8)
-│   ├── mmtp_word0_integration_test.sh # gw MMTP lab (E–P: word-0 … ISOBMFF prefix) + mmt_probe strip (M8)
+│   ├── mmtp_word0_integration_test.sh # gw MMTP lab (E–Q: word-0 … ISOBMFF + DU_header strip) + mmt_probe strip (M8)
 │   ├── udp_integration_test.sh # same via udp:// sink + _udp_recv_concat.py
 │   ├── ipv4udp_file_integration_test.sh  # ipv4udp-file:// + m8 strip + verify
 │   ├── stltp_integration_test.sh  # stltp:// lab UDP + _stltp_lab_udp_to_tlvmux.py + verify

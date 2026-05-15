@@ -48,7 +48,15 @@
 //                            [--expect-mmtp-isobmff-aggregation 0|1]
 //                            [--expect-mmtp-isobmff-fragment-counter N]
 //                            [--expect-mmtp-isobmff-sequence-number U32]
-//                            [--expect-mmtp-isobmff-aggregate-hex HEX ...]]]
+//                            [--expect-mmtp-isobmff-aggregate-hex HEX ...]
+//                            [--strip-mmtp-isobmff-du-header
+//                               (non-aggregated **A**=**0** only; **FT**=**2** on wire)
+//                               [--expect-mmtp-isobmff-du-item-id U32]
+//                               [--expect-mmtp-isobmff-du-mf-sequence U32]
+//                               [--expect-mmtp-isobmff-du-sample-number U32]
+//                               [--expect-mmtp-isobmff-du-offset U32]
+//                               [--expect-mmtp-isobmff-du-subsample-priority N]
+//                               [--expect-mmtp-isobmff-du-dependency-counter N]]]]
 //                       [--strip-lct-word0 [--expect-lct-codepoint N]
 //                                            [--expect-lct-tsi U32]
 //                                            [--expect-lct-toi U32]]]
@@ -91,6 +99,11 @@
 //       length (**payload_length_excluding_length_field** − **6**) is consumed;
 //       optional **--expect-mmtp-isobmff-aggregate-hex** (repeat, one per DU) checks
 //       each **DU** blob.
+//       **--strip-mmtp-isobmff-du-header** (after the 64b ISOBMFF prefix) removes one
+//       **DU_header** (Figure 4 **14** B when **T**=**1**, Figure 5 **4** B when **T**=**0**)
+//       when **aggregation_flag** is **0** and **fragment_type** is **2**; not supported
+//       when **A**=**1**. Optional **--expect-mmtp-isobmff-du-*** fields assert decoded
+//       header fields.
 //       When --strip-lct-word0 is set (gateway was run with
 //       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
 //       opaque body (after optional MMTP peel). Lab extensions after word‑0:
@@ -139,6 +152,8 @@
 #include "mmtp_header_extension_decoder.h"
 #include "mmtp_header_ts_psn_decoder.h"
 #include "mmtp_header_word0_decoder.h"
+#include "mmtp_payload_isobmff_du_header_non_timed_decoder.h"
+#include "mmtp_payload_isobmff_du_header_timed_decoder.h"
 #include "mmtp_payload_isobmff_prefix_decoder.h"
 #include "mmtp_payload_signalling_prefix_decoder.h"
 #include "tlv_mux_decoder.h"
@@ -210,6 +225,8 @@ constexpr std::size_t k_mmtp_ts_psn_bytes = 8;
 constexpr std::size_t k_mmtp_counter32_bytes = 4;
 constexpr std::size_t k_mmtp_signalling_prefix_bytes = 2;
 constexpr std::size_t k_mmtp_isobmff_prefix_bytes   = 8;
+constexpr std::size_t k_isobmff_du_header_timed_octets   = 14;
+constexpr std::size_t k_isobmff_du_header_non_timed_octets = 4;
 
 inline std::uint32_t read_be32(std::span<const std::byte> four) noexcept {
     std::uint32_t x = 0;
@@ -342,6 +359,14 @@ struct opts {
     /// When non-empty, each entry is expected **DU** octets (after **DU_length**) in
     /// wire order when **aggregation_flag** was **1** (**requires** **--strip-mmtp-isobmff-prefix**).
     std::vector<std::vector<std::byte>> expect_mmtp_isobmff_aggregate_hex;
+    /// After **--strip-mmtp-isobmff-prefix** with **A**=**0**: peel **DU_header** (Fig. 4/5).
+    bool strip_mmtp_isobmff_du_header = false;
+    std::optional<std::uint32_t> expect_mmtp_isobmff_du_item_id;
+    std::optional<std::uint32_t> expect_mmtp_isobmff_du_movie_fragment_sequence_number;
+    std::optional<std::uint32_t> expect_mmtp_isobmff_du_sample_number;
+    std::optional<std::uint32_t> expect_mmtp_isobmff_du_offset;
+    std::optional<std::uint8_t> expect_mmtp_isobmff_du_subsample_priority;
+    std::optional<std::uint8_t> expect_mmtp_isobmff_du_dependency_counter;
 };
 
 opts parse_args(int argc, char **argv) {
@@ -552,6 +577,40 @@ opts parse_args(int argc, char **argv) {
         } else if (k == "--expect-mmtp-isobmff-aggregate-hex") {
             o.expect_mmtp_isobmff_aggregate_hex.push_back(
                 hex_to_bytes(std::string(next())));
+        } else if (k == "--strip-mmtp-isobmff-du-header") {
+            o.strip_mmtp_isobmff_du_header = true;
+        } else if (k == "--expect-mmtp-isobmff-du-item-id") {
+            const auto v = next_uint();
+            o.expect_mmtp_isobmff_du_item_id =
+                static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-isobmff-du-mf-sequence") {
+            const auto v = next_uint();
+            o.expect_mmtp_isobmff_du_movie_fragment_sequence_number =
+                static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-isobmff-du-sample-number") {
+            const auto v = next_uint();
+            o.expect_mmtp_isobmff_du_sample_number =
+                static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-isobmff-du-offset") {
+            const auto v = next_uint();
+            o.expect_mmtp_isobmff_du_offset =
+                static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-isobmff-du-subsample-priority") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-isobmff-du-subsample-priority must be <= 255");
+            }
+            o.expect_mmtp_isobmff_du_subsample_priority =
+                static_cast<std::uint8_t>(v);
+        } else if (k == "--expect-mmtp-isobmff-du-dependency-counter") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-isobmff-du-dependency-counter must be <= 255");
+            }
+            o.expect_mmtp_isobmff_du_dependency_counter =
+                static_cast<std::uint8_t>(v);
         } else throw std::runtime_error(
             std::string("unknown option: ") + std::string(k));
     }
@@ -959,6 +1018,23 @@ int do_verify(const opts &o) {
          !*o.expect_mmtp_isobmff_aggregation)) {
         std::cerr << "verify: --expect-mmtp-isobmff-aggregate-hex requires "
                      "--expect-mmtp-isobmff-aggregation 1\n";
+        return 2;
+    }
+    const bool any_isobmff_du_expect =
+        o.expect_mmtp_isobmff_du_item_id.has_value() ||
+        o.expect_mmtp_isobmff_du_movie_fragment_sequence_number.has_value() ||
+        o.expect_mmtp_isobmff_du_sample_number.has_value() ||
+        o.expect_mmtp_isobmff_du_offset.has_value() ||
+        o.expect_mmtp_isobmff_du_subsample_priority.has_value() ||
+        o.expect_mmtp_isobmff_du_dependency_counter.has_value();
+    if (o.strip_mmtp_isobmff_du_header && !o.strip_mmtp_isobmff_prefix) {
+        std::cerr << "verify: --strip-mmtp-isobmff-du-header requires "
+                     "--strip-mmtp-isobmff-prefix\n";
+        return 2;
+    }
+    if (any_isobmff_du_expect && !o.strip_mmtp_isobmff_du_header) {
+        std::cerr << "verify: --expect-mmtp-isobmff-du-* fields require "
+                     "--strip-mmtp-isobmff-du-header\n";
         return 2;
     }
     if (o.expect_lct_codepoint.has_value() && !o.strip_lct_word0) {
@@ -1426,10 +1502,98 @@ int do_verify(const opts &o) {
                           << " MMTP ISOBMFF sequence_number mismatch\n";
                 return 1;
             }
+            std::size_t non_agg_du_hdr_skip = 0;
+            if (o.strip_mmtp_isobmff_du_header) {
+                if (iso.aggregation_flag) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " --strip-mmtp-isobmff-du-header is not supported "
+                                 "when ISOBMFF aggregation_flag=1\n";
+                    return 1;
+                }
+                if (iso.fragment_type != 2u) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " --strip-mmtp-isobmff-du-header requires "
+                                 "fragment_type=2 on wire\n";
+                    return 1;
+                }
+                const std::size_t duh_sz =
+                    iso.timed_flag ? k_isobmff_du_header_timed_octets
+                                   : k_isobmff_du_header_non_timed_octets;
+                if (tail.size() < duh_sz) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " ALP opaque too short for ISOBMFF DU_header ("
+                              << duh_sz << " octets)\n";
+                    return 1;
+                }
+                if (iso.timed_flag) {
+                    auto dud = atsc3::mmtp_payload_isobmff_du_header_timed::decode(
+                        tail.subspan(0, duh_sz));
+                    if (!dud.ok || dud.bytes_consumed != duh_sz) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF timed DU_header decode: "
+                                  << (dud.ok ? "length mismatch" : dud.error)
+                                  << "\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_movie_fragment_sequence_number
+                            .has_value() &&
+                        *o.expect_mmtp_isobmff_du_movie_fragment_sequence_number !=
+                            dud.value.movie_fragment_sequence_number) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header mf_seq mismatch\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_sample_number.has_value() &&
+                        *o.expect_mmtp_isobmff_du_sample_number !=
+                            dud.value.sample_number) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header sample_number mismatch\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_offset.has_value() &&
+                        *o.expect_mmtp_isobmff_du_offset != dud.value.offset) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header offset mismatch\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_subsample_priority.has_value() &&
+                        *o.expect_mmtp_isobmff_du_subsample_priority !=
+                            dud.value.subsample_priority) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header subsample_priority mismatch\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_dependency_counter.has_value() &&
+                        *o.expect_mmtp_isobmff_du_dependency_counter !=
+                            dud.value.dependency_counter) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header dependency_counter mismatch\n";
+                        return 1;
+                    }
+                } else {
+                    auto dud = atsc3::mmtp_payload_isobmff_du_header_non_timed::decode(
+                        tail.subspan(0, duh_sz));
+                    if (!dud.ok || dud.bytes_consumed != duh_sz) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF non-timed DU_header decode: "
+                                  << (dud.ok ? "length mismatch" : dud.error)
+                                  << "\n";
+                        return 1;
+                    }
+                    if (o.expect_mmtp_isobmff_du_item_id.has_value() &&
+                        *o.expect_mmtp_isobmff_du_item_id != dud.value.item_id) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " ISOBMFF DU_header item_id mismatch\n";
+                        return 1;
+                    }
+                }
+                non_agg_du_hdr_skip = duh_sz;
+            }
             if (iso.aggregation_flag) {
                 work = work.subspan(k_mmtp_isobmff_prefix_bytes + du_peel);
             } else {
-                work = work.subspan(k_mmtp_isobmff_prefix_bytes);
+                work = work.subspan(k_mmtp_isobmff_prefix_bytes +
+                                    non_agg_du_hdr_skip);
             }
         }
 
