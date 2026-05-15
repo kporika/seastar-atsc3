@@ -199,7 +199,7 @@ make integ-udp                             # same via udp:// sink (needs python3
 make integ-ipv4udp                         # ipv4udp-file:// + m8 strip + verify (needs python3)
 make integ-stltp                           # stltp:// lab UDP strip + verify (needs python3)
 make integ-lct-word0                       # --prepend-lct-word0 + verify --strip-lct-word0
-make integ-mmtp-word0                      # MMTP lab E–P + mmt_probe strip (M8)
+make integ-mmtp-word0                      # MMTP lab E–Q + mmt_probe strip (M8)
 make integ-lls                             # lls:// Table 6.1 + gzip validate (needs python3)
 make integ-admin                           # PATCH /config sink hot-swap (needs python3)
 make integ-rtcm                            # RTCM path (default 32×128 in script; pass frames/bytes as extra args)
