@@ -144,6 +144,7 @@ the project binaries.
 
 ```bash
 make deps              # 1) build atsc3-deps (Seastar + tooling)   ← ~15 min once
+make docker-ctest      #    recommended: full Linux+Seastar build + ctest + codec_smoke in deps image (~tens of s)
 make docker-build      #    optional: codegen + ninja → ./build-docker (repeat after edits; no slim image)
 make image             # 2) build atsc3-proto (codegen + cmake + ninja
                        #    + ctest + python smoke, then a runtime layer
@@ -239,7 +240,17 @@ python3 tools/m8_bin_to_pcap.py --self-test
 
 ## Run tests
 
-Use **`build/`** after **`make build`**, or **`build-docker/`** after **`make docker-build`**:
+**Preferred (Docker):** after **`make deps`** (image **`atsc3-deps:latest`**), run the full matrix the same way the **`Dockerfile.app`** builder does — Linux toolchain, **Seastar**, **`atsc3_gw` linked**, **`ctest`**, then **`codec_smoke`** — without waiting for a multi-stage **`docker build`**:
+
+```bash
+make docker-ctest
+# or: ./scripts/docker_ctest.sh
+# Optional: ATSC3_DEPS_IMAGE=…  DOCKER_MAKE_JOBS=16
+```
+
+Scratch output lives under **`build-docker-ctest/`** (gitignored).
+
+**Native:** use **`build/`** after **`make build`**, or **`build-docker/`** after **`make docker-build`**:
 
 ```bash
 cd build-docker   # or: cd build
