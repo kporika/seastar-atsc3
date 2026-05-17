@@ -21,6 +21,10 @@ changes.
 
 ## Local dev
 
+C++ integration on macOS or minimal hosts: see
+[`docs/DOCKER_TESTING.md`](../docs/DOCKER_TESTING.md) (`make docker-ctest`,
+`make image-integ-mmtp-word0`).
+
 Requires Node 22+ and npm. If you only have Cursor's bundled node (no
 `npm`), use Docker:
 

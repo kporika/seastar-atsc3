@@ -54,7 +54,7 @@ public SPA stay in sync:
   matching line in the canvas + **`webapp/`** SPA, **`README.md`** integ comments,
   and the header comment in **`run_all_integration.sh`** itself.
 - When **MMTP** lab coverage changes (e.g. **`mmtp_word0_integration_test.sh`**
-  phases **E**–**X**, **ISOBMFF** / **GFD** / **signalling** strip semantics), also update **`END_TO_END_GAPS.md`**
+  phases **E**–**AAT**, **ISOBMFF** / **GFD** / **signalling** / **`mmt_si_*`** strip semantics), also update **`END_TO_END_GAPS.md`**
   §M8 narrative, the **`README.md`** M8 bullet + **One-shot integration** script
   examples, and this repo’s **`protocol/*.yaml`** header comments that point at
   the same milestone.

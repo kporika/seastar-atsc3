@@ -55,6 +55,13 @@ export default function App() {
                     >
                         markdown
                     </a>
+                    <a
+                        href="https://github.com/kporika/seastar-atsc3/blob/main/docs/DOCKER_TESTING.md"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        docker tests
+                    </a>
                 </nav>
             </header>
             <main className="app-main">
