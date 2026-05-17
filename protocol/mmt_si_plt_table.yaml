@@ -1,0 +1,36 @@
+# MMT-SI — **Package List Table** (**table_id** **0x80**) wire (DumpTS **`PackageListTable`** /
+# **ISO/IEC 23008-1** **§10.3**).
+#
+# **Table envelope:** **table_id**, **table_version**, **table_length** (**BE16**, octets after the
+# **4**-byte prefix). **PLT** body begins with **num_of_packages**, package entries, then
+# **num_of_ip_delivery** and **DeliveryInfo** records. This lab YAML covers the envelope +
+# **opaque** **`table_length`** region.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_table
+  proto_id: 23
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 Package List Table lab)"
+  description: "table_id + version + BE16 length + length-byte PLT body region"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: table_id, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: table_version, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: table_length, bit_offset: 16, bit_width: 16, type: uint }
+
+payload:
+  length_field: table_length
+  kind: opaque
+
+fixtures:
+  - name: minimal_empty
+    description: "PLT id 0x80 v0, length 2, zero packages and zero IP deliveries"
+    raw_hex: "80 00 00 02 00 00"
+    expected:
+      table_id: 128
+      table_version: 0
+      table_length: 2
+      payload_hex: "0000"

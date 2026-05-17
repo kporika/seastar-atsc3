@@ -1,0 +1,47 @@
+# MMT-SI — **MMT Package Table** **Asset** with **asset_descriptors_length** **4** lab slice.
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`MMTPackageTable::Asset`**
+# when **asset_id_length** **==** **0**, **location_count** **==** **0**, and **asset_descriptors_length**
+# **==** **4**. Four opaque descriptor octets follow the fixed **Asset** header.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_mpt_asset_descriptors4
+  proto_id: 44
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 MPT Asset lab; 4 B descriptors)"
+  description: "zero-id asset header + 4 descriptor octets (18 B)"
+
+header:
+  total_bits: 144
+  fields:
+    - { name: identifier_type, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: asset_id_scheme, bit_offset: 8, bit_width: 32, type: uint }
+    - { name: asset_id_length, bit_offset: 40, bit_width: 8, type: uint }
+    - { name: asset_type, bit_offset: 48, bit_width: 32, type: uint }
+    - { name: reserved, bit_offset: 80, bit_width: 7, type: uint }
+    - { name: asset_clock_relation_flag, bit_offset: 87, bit_width: 1, type: bool }
+    - { name: location_count, bit_offset: 88, bit_width: 8, type: uint }
+    - { name: asset_descriptors_length, bit_offset: 96, bit_width: 16, type: uint }
+    - { name: descriptor_byte0, bit_offset: 112, bit_width: 8, type: uint }
+    - { name: descriptor_byte1, bit_offset: 120, bit_width: 8, type: uint }
+    - { name: descriptor_byte2, bit_offset: 128, bit_width: 8, type: uint }
+    - { name: descriptor_byte3, bit_offset: 136, bit_width: 8, type: uint }
+
+fixtures:
+  - name: four_byte_descriptors
+    description: "zero asset_id, zero locations, 4 descriptor octets DE AD BE EF"
+    raw_hex: "00 00 00 00 00 00 00 00 00 00 00 00 00 04 DE AD BE EF"
+    expected:
+      identifier_type: 0
+      asset_id_scheme: 0
+      asset_id_length: 0
+      asset_type: 0
+      reserved: 0
+      asset_clock_relation_flag: false
+      location_count: 0
+      asset_descriptors_length: 4
+      descriptor_byte0: 222
+      descriptor_byte1: 173
+      descriptor_byte2: 190
+      descriptor_byte3: 239

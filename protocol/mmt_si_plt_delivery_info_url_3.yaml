@@ -1,0 +1,38 @@
+# MMT-SI — **Package List Table** **DeliveryInfo** URL record (**url_length** **3** lab slice).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::DeliveryInfo`**
+# when **location_type** **==** **0x05** (**URL**) and **url_length** **==** **3**. Fixed **3** URL
+# octets (**"lab"**) before **descripor_loop_length** **0**. Other **url_length** values are
+# future YAML.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_delivery_info_url_3
+  proto_id: 32
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT DeliveryInfo URL lab; url_length 3)"
+  description: "transport_file_id + loc 5 + url_len 3 + 3 URL octets + desc len (11 B)"
+
+header:
+  total_bits: 88
+  fields:
+    - { name: transport_file_id, bit_offset: 0, bit_width: 32, type: uint }
+    - { name: location_type, bit_offset: 32, bit_width: 8, type: uint }
+    - { name: url_length, bit_offset: 40, bit_width: 8, type: uint }
+    - { name: url_byte0, bit_offset: 48, bit_width: 8, type: uint }
+    - { name: url_byte1, bit_offset: 56, bit_width: 8, type: uint }
+    - { name: url_byte2, bit_offset: 64, bit_width: 8, type: uint }
+    - { name: descripor_loop_length, bit_offset: 72, bit_width: 16, type: uint }
+
+fixtures:
+  - name: three_byte_url_lab
+    description: "URL location, url octets lab (0x6c 0x61 0x62), zero descriptor loop"
+    raw_hex: "00 00 00 00 05 03 6c 61 62 00 00"
+    expected:
+      transport_file_id: 0
+      location_type: 5
+      url_length: 3
+      url_byte0: 108
+      url_byte1: 97
+      url_byte2: 98
+      descripor_loop_length: 0

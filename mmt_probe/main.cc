@@ -23,6 +23,8 @@
 //
 //   verify  --file PATH --expected-payloads HEX[,HEX,...]
 //                       [--validate-rtcm]
+//                       [--expect-alp-payload-config 0|1]
+//                       [--expect-alp-header-mode 0|1]
 //                       [--strip-mmtp-word0 [--expect-mmtp-payload-type N]
 //                                             [--expect-mmtp-packet-id U16]]]
 //                       [--strip-mmtp-ts-psn [--expect-mmtp-timestamp U32]
@@ -39,7 +41,15 @@
 //                            [--expect-mmtp-signalling-aggregation 0|1]
 //                            [--expect-mmtp-signalling-fragment-counter N]
 //                            [--strip-mmtp-signalling-aggregate-count N]
-//                            [--expect-mmtp-signalling-aggregate-hex HEX ...]]]
+//                            [--expect-mmtp-signalling-aggregate-hex HEX ...]
+//                            [--strip-mmt-si-message-header-len32
+//                             [--expect-mmt-si-message-byte-length U32 ...]]
+//                            [--strip-mmt-si-length32-envelope
+//                             [--expect-mmt-si-body-byte-length U32 ...]]
+//                            [--strip-mmt-si-descriptor-loop-u32
+//                             [--expect-mmt-si-descriptor-loop-length U32 ...]]
+//                            [--strip-mmt-si-pa-table-headers
+//                             [--expect-mmt-si-pa-number-of-tables N ...]]]]
 //                       [--strip-mmtp-isobmff-prefix
 //                            [--expect-mmtp-isobmff-payload-length-excluding N]
 //                            [--expect-mmtp-isobmff-fragment-type N]
@@ -50,13 +60,24 @@
 //                            [--expect-mmtp-isobmff-sequence-number U32]
 //                            [--expect-mmtp-isobmff-aggregate-hex HEX ...]
 //                            [--strip-mmtp-isobmff-du-header
-//                               (non-aggregated **A**=**0** only; **FT**=**2** on wire)
+//                               (**FT**=**2** on wire; **A**=**0** peel one header;
+//                               **A**=**1** peel header per **DU**; with aggregation,
+//                               **--expect-mmtp-isobmff-aggregate-hex** values are
+//                               **media-only** octets after each **DU_header**)
 //                               [--expect-mmtp-isobmff-du-item-id U32]
 //                               [--expect-mmtp-isobmff-du-mf-sequence U32]
 //                               [--expect-mmtp-isobmff-du-sample-number U32]
 //                               [--expect-mmtp-isobmff-du-offset U32]
 //                               [--expect-mmtp-isobmff-du-subsample-priority N]
 //                               [--expect-mmtp-isobmff-du-dependency-counter N]]]]
+//                       [--strip-mmtp-gfd-header
+//                            [--expect-mmtp-gfd-session-last 0|1]
+//                            [--expect-mmtp-gfd-object-last-packet 0|1]
+//                            [--expect-mmtp-gfd-object-last-byte 0|1]
+//                            [--expect-mmtp-gfd-code-point N]
+//                            [--expect-mmtp-gfd-reserved N]
+//                            [--expect-mmtp-gfd-toi U32]
+//                            [--expect-mmtp-gfd-start-offset U64]]
 //                       [--strip-lct-word0 [--expect-lct-codepoint N]
 //                                            [--expect-lct-tsi U32]
 //                                            [--expect-lct-toi U32]]]
@@ -66,13 +87,18 @@
 //       --validate-rtcm, also CRC-validates each recovered payload as
 //       a stand-alone RTCM v3 frame.
 //
+//       Optional **--expect-alp-payload-config** / **--expect-alp-header-mode**
+//       (**0**/**1**) assert **A/330** §5.2 base-header bits on each decoded ALP
+//       (no strip flag required).
+//
 //       When --strip-mmtp-word0 is set (gateway was run with
 //       --prepend-mmtp-word0), peel the ISO/IEC 23008-1 MMTP packet header
 //       word‑0 (32b) from the front of each ALP opaque body **before** optional
 //       **ts_psn** / **packet_counter** / **extension** chain / **LCT** peels (wire order:
 //       MMTP word‑0, optional ts_psn, optional packet_counter, optional extension TLVs,
-//       optional **signalling payload prefix** (16b §**9.3.4**) or optional **ISOBMFF**
-//       **payload prefix** (64b Figure 3 when **payload_type**=**0**), optional LCT).
+//       optional **signalling payload prefix** (16b §**9.3.4**), optional **ISOBMFF**
+//       **payload prefix** (64b Figure 3 when **payload_type**=**0**), optional **GFD**
+//       **payload header** (96b Figure 6 when **payload_type**=**1**), optional LCT).
 //
 //       --strip-mmtp-ts-psn peels the 64b **mmtp_header_ts_psn** block **after**
 //       --strip-mmtp-word0 (requires **--strip-mmtp-word0**).
@@ -94,16 +120,49 @@
 //       Optional **--expect-mmtp-signalling-aggregate-hex** (repeat, same **N**) checks
 //       each body.
 //
+//       **--strip-mmt-si-message-header-len32** (after **§9.3.4** peel and optional aggregate peel)
+//       removes **`mmt_si_message_header_len32`** (**§10.3** consumption **message_id** + **version** +
+//       **BE32** **message_byte_length** + body). **Requires** **--strip-mmtp-signalling-prefix**;
+//       peel **before** **--strip-mmt-si-length32-envelope** / **--strip-mmt-si-descriptor-loop-u32** /
+//       **--strip-mmt-si-pa-table-headers** when those layers are present on the wire. Optional repeated
+//       **--expect-mmt-si-message-byte-length**
+//       (one per **--expected-payloads** CSV entry) asserts each message’s declared **message_byte_length**.
+//
+//       **--strip-mmt-si-length32-envelope** (after **§9.3.4** peel and optional aggregate peel)
+//       removes **`mmt_si_length32_envelope`** (**BE32** **body_byte_length** + body).
+//       **Requires** **--strip-mmtp-signalling-prefix**; incompatible with **--strip-mmtp-signalling-aggregate-count**
+//       (gateway forbids combining aggregate bodies with this envelope). Optional repeated
+//       **--expect-mmt-si-body-byte-length** (one per **--expected-payloads** CSV entry, same order)
+//       asserts each envelope’s declared length.
+//
+//       **--strip-mmt-si-descriptor-loop-u32** (after optional **§10.3** message-header peel and optional
+//       **§10.2** envelope peel) removes
+//       **`mmt_si_descriptor_loop_u32`** (**BE32** **loop_length** + **mmtp_desc** octets). Same
+//       signalling preconditions as the length32 strip; optional repeated
+//       **--expect-mmt-si-descriptor-loop-length** matches each CSV entry’s declared **loop_length**.
+//
+//       **--strip-mmt-si-pa-table-headers** (after optional message / envelope / descriptor peels)
+//       removes **`mmt_si_pa_table_headers`** (**number_of_tables** + **BE16** **table_headers_byte_length**
+//       + concatenated **mmt_si_table_header_word32** rows). Same signalling preconditions as the
+//       descriptor strip; optional repeated **--expect-mmt-si-pa-number-of-tables** (0–255, one per
+//       **--expected-payloads** CSV entry) asserts each decoded **number_of_tables** field.
+//
 //       With **--strip-mmtp-isobmff-prefix**, when **aggregation_flag** is **1** on the
 //       wire, peel **DU_length** (16b BE) + **DU** octets until the ISOBMFF payload
 //       length (**payload_length_excluding_length_field** − **6**) is consumed;
 //       optional **--expect-mmtp-isobmff-aggregate-hex** (repeat, one per DU) checks
-//       each **DU** blob.
-//       **--strip-mmtp-isobmff-du-header** (after the 64b ISOBMFF prefix) removes one
-//       **DU_header** (Figure 4 **14** B when **T**=**1**, Figure 5 **4** B when **T**=**0**)
-//       when **aggregation_flag** is **0** and **fragment_type** is **2**; not supported
-//       when **A**=**1**. Optional **--expect-mmtp-isobmff-du-*** fields assert decoded
-//       header fields.
+//       each **DU** blob (full wire **DU** unless **--strip-mmtp-isobmff-du-header** is set).
+//       **--strip-mmtp-isobmff-du-header** (after the 64b ISOBMFF prefix when **A**=**0**,
+//       or inside each aggregated **DU** when **A**=**1**) removes **DU_header** (Figure 4
+//       **14** B when **T**=**1**, Figure 5 **4** B when **T**=**0**); requires **FT**=**2**
+//       on the prefix. With **A**=**1** and **--expect-mmtp-isobmff-aggregate-hex**, each
+//       expect hex is **media-only** (wire **DU_length** includes header + media).
+//       Optional **--expect-mmtp-isobmff-du-*** fields assert decoded header field(s).
+//
+//       **--strip-mmtp-gfd-header** (after optional extension peel) removes the **96b**
+//       **mmtp_payload_gfd_header** when **payload_type** was **1** on the stripped word‑0;
+//       requires **--strip-mmtp-word0** and **--expect-mmtp-payload-type** **1**. Mutually
+//       exclusive with signalling and ISOBMFF payload prefix strips.
 //       When --strip-lct-word0 is set (gateway was run with
 //       --prepend-lct-word0), peel the RFC 5651 §5.1 word-0 from each ALP
 //       opaque body (after optional MMTP peel). Lab extensions after word‑0:
@@ -154,8 +213,53 @@
 #include "mmtp_header_word0_decoder.h"
 #include "mmtp_payload_isobmff_du_header_non_timed_decoder.h"
 #include "mmtp_payload_isobmff_du_header_timed_decoder.h"
+#include "mmtp_payload_gfd_header_decoder.h"
 #include "mmtp_payload_isobmff_prefix_decoder.h"
 #include "mmtp_payload_signalling_prefix_decoder.h"
+#include "mmt_si_descriptor_loop_u32_decoder.h"
+#include "mmt_si_length32_envelope_decoder.h"
+#include "mmt_si_message_header_len32_decoder.h"
+#include "mmt_si_mpt_asset_decoder.h"
+#include "mmt_si_mpt_asset_descriptors4_decoder.h"
+#include "mmt_si_mpt_asset_id8_decoder.h"
+#include "mmt_si_mpt_asset_id16_decoder.h"
+#include "mmt_si_mpt_asset_location0_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id16_descriptors4_decoder.h"
+#include "mmt_si_mpt_asset_id8_descriptors4_decoder.h"
+#include "mmt_si_mpt_table_body_prefix_decoder.h"
+#include "mmt_si_mpt_table_decoder.h"
+#include "mmt_si_pa_table_headers_decoder.h"
+#include "mmt_si_plt_delivery_info_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv4_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv4_nz_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv6_decoder.h"
+#include "mmt_si_plt_delivery_info_url_decoder.h"
+#include "mmt_si_plt_delivery_info_url_3_decoder.h"
+#include "mmt_si_plt_delivery_info_url_4_decoder.h"
+#include "mmt_si_plt_package_entry_decoder.h"
+#include "mmt_si_plt_package_entry_id8_decoder.h"
+#include "mmt_si_plt_package_entry_ipv4_decoder.h"
+#include "mmt_si_plt_package_entry_ipv4_nz_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv4_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv4_nz_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv6_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv6_nz_decoder.h"
+#include "mmt_si_plt_package_entry_ipv6_decoder.h"
+#include "mmt_si_plt_package_entry_ipv6_nz_decoder.h"
+#include "mmt_si_plt_table_body_prefix_decoder.h"
+#include "mmt_si_plt_table_decoder.h"
 #include "tlv_mux_decoder.h"
 
 #include "rtcm_v3.h"
@@ -225,6 +329,7 @@ constexpr std::size_t k_mmtp_ts_psn_bytes = 8;
 constexpr std::size_t k_mmtp_counter32_bytes = 4;
 constexpr std::size_t k_mmtp_signalling_prefix_bytes = 2;
 constexpr std::size_t k_mmtp_isobmff_prefix_bytes   = 8;
+constexpr std::size_t k_mmtp_gfd_header_bytes       = 12;
 constexpr std::size_t k_isobmff_du_header_timed_octets   = 14;
 constexpr std::size_t k_isobmff_du_header_non_timed_octets = 4;
 
@@ -309,6 +414,10 @@ struct opts {
     std::optional<std::uint32_t> expect_lct_tsi;
     /// When set with --strip-lct-word0, compare against the 32-bit TOI peel (O==1).
     std::optional<std::uint32_t> expect_lct_toi;
+    /// Assert **A/330** §5.2 ALP base header **payload_configuration** (**0**/**1**) after TLV-mux.
+    std::optional<bool> expect_alp_payload_config;
+    /// Assert **A/330** §5.2 ALP base header **header_mode** (**0**/**1**) after TLV-mux.
+    std::optional<bool> expect_alp_header_mode;
     /// Peel MMTP packet header word‑0 (32b) before LCT / payload compare.
     bool strip_mmtp_word0 = false;
     /// With --strip-mmtp-word0: require payload_type (0–63).
@@ -346,6 +455,92 @@ struct opts {
     /// When non-empty, size must equal **mmtp_signalling_aggregate_strip_count**; each
     /// entry is the expected body octets for that pair (wire order).
     std::vector<std::vector<std::byte>> expect_mmtp_signalling_aggregate_hex;
+    /// After **§9.3.4** peel (and optional aggregate peel): remove **`mmt_si_length32_envelope`**
+    /// (**`protocol/mmt_si_length32_envelope.yaml`**).
+    bool strip_mmt_si_length32_envelope = false;
+    /// With **--strip-mmt-si-length32-envelope**: optional per-TLV **body_byte_length** (**BE32**),
+    /// same count/order as **--expected-payloads** CSV entries.
+    std::vector<std::uint32_t> expect_mmt_si_body_byte_lengths;
+    /// After optional **§10.2** envelope peel: remove **`mmt_si_descriptor_loop_u32`**
+    /// (**`protocol/mmt_si_descriptor_loop_u32.yaml`**).
+    bool strip_mmt_si_descriptor_loop_u32 = false;
+    /// With **--strip-mmt-si-descriptor-loop-u32**: optional per-TLV **loop_length** (**BE32**),
+    /// same count/order as **--expected-payloads** CSV entries.
+    std::vector<std::uint32_t> expect_mmt_si_descriptor_loop_lengths;
+    /// After **§9.3.4** peel (and optional aggregate peel): remove **`mmt_si_message_header_len32`**
+    /// (**§10.3** consumption message prefix + body). **Outermost** SI lab layer vs **§10.2** envelope /
+    /// **descriptor loop**.
+    bool strip_mmt_si_message_header_len32 = false;
+    /// With **--strip-mmt-si-message-header-len32**: optional per-TLV **message_byte_length** (**BE32**),
+    /// same count/order as **--expected-payloads** CSV entries.
+    std::vector<std::uint32_t> expect_mmt_si_message_byte_lengths;
+    /// After optional **§10.3** message / **§10.2** envelope / **descriptor loop** peels: remove
+    /// **`mmt_si_pa_table_headers`** (**`protocol/mmt_si_pa_table_headers.yaml`**).
+    bool strip_mmt_si_pa_table_headers = false;
+    /// With **--strip-mmt-si-pa-table-headers**: optional per-TLV **number_of_tables** (**8** bits),
+    /// same count/order as **--expected-payloads** CSV entries.
+    std::vector<std::uint32_t> expect_mmt_si_pa_number_of_tables;
+    /// After optional **PA** peel: decode-check **`mmt_si_mpt_table`** (**table_id** **0x20**).
+    std::vector<std::uint32_t> expect_mmt_si_mpt_table_id;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_table_length;
+    /// After optional **PA** peel: decode-check **`mmt_si_plt_table`** (**table_id** **0x80**).
+    std::vector<std::uint32_t> expect_mmt_si_plt_table_id;
+    std::vector<std::uint32_t> expect_mmt_si_plt_table_length;
+    /// After optional **PA** peel: remove a parsed **`mmt_si_mpt_table`** from the SI tail.
+    bool strip_mmt_si_mpt_table = false;
+    /// With MPT table decode: per-TLV **`number_of_assets`** from **`mmt_si_mpt_table_body_prefix`**.
+    std::vector<std::uint32_t> expect_mmt_si_mpt_table_body_num_assets;
+    /// With MPT table decode: first **`mmt_si_mpt_asset`** after the body prefix (**ZK** lab).
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_id_length;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_asset_id;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_id16_byte0;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_id16_byte1;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_location_count;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_location_type;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_packet_id;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv4_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv4_src_addr;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv4_dst_addr;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv6_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv6_src_addr_3;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_ipv6_dst_addr_3;
+    std::vector<std::uint32_t> expect_mmt_si_mpt_asset_descriptors_length;
+    /// With PLT table decode: per-TLV **`num_of_packages`** from **`mmt_si_plt_table_body_prefix`**.
+    std::vector<std::uint32_t> expect_mmt_si_plt_table_body_num_packages;
+    /// With PLT table decode: per-TLV **`num_of_ip_delivery`** from **`mmt_si_plt_table_body_prefix`**.
+    std::vector<std::uint32_t> expect_mmt_si_plt_table_body_num_ip_delivery;
+    /// With PLT table decode: first **`mmt_si_plt_delivery_info`** after the body prefix (**ZL** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_location_type;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_descriptor_loop_length;
+    /// With PLT table decode: first **`mmt_si_plt_delivery_info_ipv4`** after the body prefix (**ZM** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_ipv4_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_ipv4_src_addr;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_ipv4_dst_addr;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_ipv6_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_length;
+    /// With PLT table decode: **`mmt_si_plt_delivery_info_url_3`** (**ZQ** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_3_byte0;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_3_byte1;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_3_byte2;
+    /// With PLT table decode: **`mmt_si_plt_delivery_info_url_4`** (**AAD** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_4_byte0;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_4_byte1;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_4_byte2;
+    std::vector<std::uint32_t> expect_mmt_si_plt_delivery_info_url_4_byte3;
+    /// With PLT table decode: first **`mmt_si_plt_package_entry`** after the body prefix (**ZP** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_id_length;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_mmt_package_id;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_location_type;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_packet_id;
+    /// With PLT table decode: first **`mmt_si_plt_package_entry_ipv4`** after the body prefix (**ZU** lab).
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv4_src_addr;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv4_dst_addr;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv4_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv6_dst_port;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv6_src_addr_3;
+    std::vector<std::uint32_t> expect_mmt_si_plt_package_ipv6_dst_addr_3;
+    /// After optional **PA** peel: remove a parsed **`mmt_si_plt_table`** from the SI tail.
+    bool strip_mmt_si_plt_table = false;
     /// After optional extension peel: remove **mmtp_payload_isobmff_prefix** (64b;
     /// **payload_type** must be **0**). Mutually exclusive with signalling strip.
     bool strip_mmtp_isobmff_prefix = false;
@@ -356,10 +551,13 @@ struct opts {
     std::optional<bool> expect_mmtp_isobmff_aggregation;
     std::optional<std::uint8_t> expect_mmtp_isobmff_fragment_counter;
     std::optional<std::uint32_t> expect_mmtp_isobmff_sequence_number;
-    /// When non-empty, each entry is expected **DU** octets (after **DU_length**) in
-    /// wire order when **aggregation_flag** was **1** (**requires** **--strip-mmtp-isobmff-prefix**).
+    /// When non-empty, each entry is expected **DU** octets in wire order when
+    /// **aggregation_flag** was **1** (**requires** **--strip-mmtp-isobmff-prefix**): full **DU**
+    /// after **DU_length** unless **--strip-mmtp-isobmff-du-header** is also set, in which case
+    /// each entry is **media-only** (after **DU_header** inside each **DU**).
     std::vector<std::vector<std::byte>> expect_mmtp_isobmff_aggregate_hex;
-    /// After **--strip-mmtp-isobmff-prefix** with **A**=**0**: peel **DU_header** (Fig. 4/5).
+    /// With **--strip-mmtp-isobmff-prefix**: peel **DU_header** from the front of each **DU**
+    /// (**A**=**0** once after the 64b prefix; **A**=**1** once per aggregated **DU**; **FT** must be **2**).
     bool strip_mmtp_isobmff_du_header = false;
     std::optional<std::uint32_t> expect_mmtp_isobmff_du_item_id;
     std::optional<std::uint32_t> expect_mmtp_isobmff_du_movie_fragment_sequence_number;
@@ -367,7 +565,103 @@ struct opts {
     std::optional<std::uint32_t> expect_mmtp_isobmff_du_offset;
     std::optional<std::uint8_t> expect_mmtp_isobmff_du_subsample_priority;
     std::optional<std::uint8_t> expect_mmtp_isobmff_du_dependency_counter;
+    /// After optional extension peel: remove **mmtp_payload_gfd_header** (96b; **payload_type** **1**).
+    bool strip_mmtp_gfd_header = false;
+    std::optional<bool> expect_mmtp_gfd_session_last;
+    std::optional<bool> expect_mmtp_gfd_object_last_packet;
+    std::optional<bool> expect_mmtp_gfd_object_last_byte;
+    std::optional<std::uint8_t> expect_mmtp_gfd_code_point;
+    std::optional<std::uint8_t> expect_mmtp_gfd_reserved;
+    std::optional<std::uint32_t> expect_mmtp_gfd_toi;
+    std::optional<std::uint64_t> expect_mmtp_gfd_start_offset;
 };
+
+// When **strip_du_hdr** is false, returns **0**. Otherwise decodes **DU_header** from the
+// start of **du_body** (**FT** must be **2**), applies optional **`--expect-mmtp-isobmff-du-*`**,
+// and returns the header size in octets. On failure prints to **std::cerr** and returns **nullopt**.
+inline std::optional<std::size_t> mmtp_isobmff_du_header_strip_octets(
+    bool strip_du_hdr,
+    std::uint8_t fragment_type,
+    bool timed_flag,
+    std::span<const std::byte> du_body,
+    int tlv_idx,
+    const opts& o) {
+    if (!strip_du_hdr) {
+        return std::size_t{0};
+    }
+    if (fragment_type != 2u) {
+        std::cerr << "verify: TLV #" << tlv_idx
+                  << " --strip-mmtp-isobmff-du-header requires fragment_type=2 on wire\n";
+        return std::nullopt;
+    }
+    const std::size_t duh_sz =
+        timed_flag ? k_isobmff_du_header_timed_octets
+                   : k_isobmff_du_header_non_timed_octets;
+    if (du_body.size() < duh_sz) {
+        std::cerr << "verify: TLV #" << tlv_idx
+                  << " ISOBMFF DU too short for DU_header (" << duh_sz << " octets)\n";
+        return std::nullopt;
+    }
+    if (timed_flag) {
+        auto dud = atsc3::mmtp_payload_isobmff_du_header_timed::decode(
+            du_body.subspan(0, duh_sz));
+        if (!dud.ok || dud.bytes_consumed != duh_sz) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF timed DU_header decode: "
+                      << (dud.ok ? "length mismatch" : dud.error) << "\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_movie_fragment_sequence_number.has_value() &&
+            *o.expect_mmtp_isobmff_du_movie_fragment_sequence_number !=
+                dud.value.movie_fragment_sequence_number) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header mf_seq mismatch\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_sample_number.has_value() &&
+            *o.expect_mmtp_isobmff_du_sample_number != dud.value.sample_number) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header sample_number mismatch\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_offset.has_value() &&
+            *o.expect_mmtp_isobmff_du_offset != dud.value.offset) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header offset mismatch\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_subsample_priority.has_value() &&
+            *o.expect_mmtp_isobmff_du_subsample_priority !=
+                dud.value.subsample_priority) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header subsample_priority mismatch\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_dependency_counter.has_value() &&
+            *o.expect_mmtp_isobmff_du_dependency_counter !=
+                dud.value.dependency_counter) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header dependency_counter mismatch\n";
+            return std::nullopt;
+        }
+    } else {
+        auto dud = atsc3::mmtp_payload_isobmff_du_header_non_timed::decode(
+            du_body.subspan(0, duh_sz));
+        if (!dud.ok || dud.bytes_consumed != duh_sz) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF non-timed DU_header decode: "
+                      << (dud.ok ? "length mismatch" : dud.error) << "\n";
+            return std::nullopt;
+        }
+        if (o.expect_mmtp_isobmff_du_item_id.has_value() &&
+            *o.expect_mmtp_isobmff_du_item_id != dud.value.item_id) {
+            std::cerr << "verify: TLV #" << tlv_idx
+                      << " ISOBMFF DU_header item_id mismatch\n";
+            return std::nullopt;
+        }
+    }
+    return duh_sz;
+}
 
 opts parse_args(int argc, char **argv) {
     if (argc < 2) {
@@ -421,6 +715,20 @@ opts parse_args(int argc, char **argv) {
         } else if (k == "--expect-lct-toi") {
             const auto v = next_uint();
             o.expect_lct_toi = static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-alp-payload-config") {
+            const auto v = next_uint();
+            if (v > 1u) {
+                throw std::runtime_error(
+                    "--expect-alp-payload-config must be 0 or 1");
+            }
+            o.expect_alp_payload_config = (v != 0);
+        } else if (k == "--expect-alp-header-mode") {
+            const auto v = next_uint();
+            if (v > 1u) {
+                throw std::runtime_error(
+                    "--expect-alp-header-mode must be 0 or 1");
+            }
+            o.expect_alp_header_mode = (v != 0);
         } else if (k == "--expect-mmtp-payload-type") {
             const auto v = next_uint();
             if (v > 63u) {
@@ -522,6 +830,304 @@ opts parse_args(int argc, char **argv) {
         } else if (k == "--expect-mmtp-signalling-aggregate-hex") {
             o.expect_mmtp_signalling_aggregate_hex.push_back(
                 hex_to_bytes(std::string(next())));
+        } else if (k == "--strip-mmt-si-message-header-len32") {
+            o.strip_mmt_si_message_header_len32 = true;
+        } else if (k == "--expect-mmt-si-message-byte-length") {
+            o.expect_mmt_si_message_byte_lengths.push_back(
+                static_cast<std::uint32_t>(next_uint()));
+        } else if (k == "--strip-mmt-si-length32-envelope") {
+            o.strip_mmt_si_length32_envelope = true;
+        } else if (k == "--expect-mmt-si-body-byte-length") {
+            o.expect_mmt_si_body_byte_lengths.push_back(
+                static_cast<std::uint32_t>(next_uint()));
+        } else if (k == "--strip-mmt-si-descriptor-loop-u32") {
+            o.strip_mmt_si_descriptor_loop_u32 = true;
+        } else if (k == "--expect-mmt-si-descriptor-loop-length") {
+            o.expect_mmt_si_descriptor_loop_lengths.push_back(
+                static_cast<std::uint32_t>(next_uint()));
+        } else if (k == "--strip-mmt-si-pa-table-headers") {
+            o.strip_mmt_si_pa_table_headers = true;
+        } else if (k == "--expect-mmt-si-pa-number-of-tables") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-pa-number-of-tables must be <= 255");
+            }
+            o.expect_mmt_si_pa_number_of_tables.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-table-id") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-table-id must be <= 255");
+            }
+            o.expect_mmt_si_mpt_table_id.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-table-length") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-table-length must be <= 65535");
+            }
+            o.expect_mmt_si_mpt_table_length.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-table-id") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-table-id must be <= 255");
+            }
+            o.expect_mmt_si_plt_table_id.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-table-length") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-table-length must be <= 65535");
+            }
+            o.expect_mmt_si_plt_table_length.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-table-body-num-assets") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-table-body-num-assets must be <= 255");
+            }
+            o.expect_mmt_si_mpt_table_body_num_assets.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-id-length") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-id-length must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_id_length.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-asset-id") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-asset-id must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_asset_id.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-id16-byte0") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-id16-byte0 must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_id16_byte0.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-id16-byte1") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-id16-byte1 must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_id16_byte1.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-location-count") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-location-count must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_location_count.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-location-type") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-location-type must be <= 255");
+            }
+            o.expect_mmt_si_mpt_asset_location_type.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-packet-id") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-packet-id must be <= 65535");
+            }
+            o.expect_mmt_si_mpt_asset_packet_id.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv4-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-ipv4-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_mpt_asset_ipv4_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv4-src-addr") {
+            const auto v = next_uint();
+            o.expect_mmt_si_mpt_asset_ipv4_src_addr.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv4-dst-addr") {
+            const auto v = next_uint();
+            o.expect_mmt_si_mpt_asset_ipv4_dst_addr.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv6-src-addr-3") {
+            o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv6-dst-addr-3") {
+            o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-mpt-asset-ipv6-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-ipv6-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_mpt_asset_ipv6_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-mpt-asset-descriptors-length") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-mpt-asset-descriptors-length must be <= 65535");
+            }
+            o.expect_mmt_si_mpt_asset_descriptors_length.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-table-body-num-packages") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-table-body-num-packages must be <= 255");
+            }
+            o.expect_mmt_si_plt_table_body_num_packages.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-table-body-num-ip-delivery") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-table-body-num-ip-delivery must be <= 255");
+            }
+            o.expect_mmt_si_plt_table_body_num_ip_delivery.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-3-byte0") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-3-byte0 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_3_byte0.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-3-byte1") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-3-byte1 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_3_byte1.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-3-byte2") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-3-byte2 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_3_byte2.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-4-byte0") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-4-byte0 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_4_byte0.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-4-byte1") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-4-byte1 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_4_byte1.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-4-byte2") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-4-byte2 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_4_byte2.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-4-byte3") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-4-byte3 must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_4_byte3.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-mmt-package-id") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-mmt-package-id must be <= 255");
+            }
+            o.expect_mmt_si_plt_package_mmt_package_id.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-id-length") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-id-length must be <= 255");
+            }
+            o.expect_mmt_si_plt_package_id_length.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-location-type") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-location-type must be <= 255");
+            }
+            o.expect_mmt_si_plt_package_location_type.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-packet-id") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-packet-id must be <= 65535");
+            }
+            o.expect_mmt_si_plt_package_packet_id.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-ipv4-src-addr") {
+            o.expect_mmt_si_plt_package_ipv4_src_addr.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-plt-package-ipv4-dst-addr") {
+            o.expect_mmt_si_plt_package_ipv4_dst_addr.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-plt-package-ipv4-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-ipv4-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_plt_package_ipv4_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-package-ipv6-src-addr-3") {
+            o.expect_mmt_si_plt_package_ipv6_src_addr_3.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-plt-package-ipv6-dst-addr-3") {
+            o.expect_mmt_si_plt_package_ipv6_dst_addr_3.push_back(next_uint());
+        } else if (k == "--expect-mmt-si-plt-package-ipv6-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-package-ipv6-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_plt_package_ipv6_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-location-type") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-location-type must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_location_type.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-descriptor-loop-length") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-descriptor-loop-length "
+                    "must be <= 65535");
+            }
+            o.expect_mmt_si_plt_delivery_info_descriptor_loop_length.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-ipv4-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-ipv4-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_plt_delivery_info_ipv4_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-ipv4-src-addr") {
+            const auto v = next_uint();
+            o.expect_mmt_si_plt_delivery_info_ipv4_src_addr.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-ipv4-dst-addr") {
+            const auto v = next_uint();
+            o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-ipv6-dst-port") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-ipv6-dst-port must be <= 65535");
+            }
+            o.expect_mmt_si_plt_delivery_info_ipv6_dst_port.push_back(v);
+        } else if (k == "--expect-mmt-si-plt-delivery-info-url-length") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-plt-delivery-info-url-length must be <= 255");
+            }
+            o.expect_mmt_si_plt_delivery_info_url_length.push_back(v);
+        } else if (k == "--strip-mmt-si-mpt-table") {
+            o.strip_mmt_si_mpt_table = true;
+        } else if (k == "--strip-mmt-si-plt-table") {
+            o.strip_mmt_si_plt_table = true;
         } else if (k == "--strip-mmtp-isobmff-prefix") {
             o.strip_mmtp_isobmff_prefix = true;
         } else if (k == "--expect-mmtp-isobmff-payload-length-excluding") {
@@ -611,6 +1217,48 @@ opts parse_args(int argc, char **argv) {
             }
             o.expect_mmtp_isobmff_du_dependency_counter =
                 static_cast<std::uint8_t>(v);
+        } else if (k == "--strip-mmtp-gfd-header") {
+            o.strip_mmtp_gfd_header = true;
+        } else if (k == "--expect-mmtp-gfd-session-last") {
+            const auto v = next_uint();
+            if (v > 1u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-gfd-session-last must be 0 or 1");
+            }
+            o.expect_mmtp_gfd_session_last = (v != 0);
+        } else if (k == "--expect-mmtp-gfd-object-last-packet") {
+            const auto v = next_uint();
+            if (v > 1u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-gfd-object-last-packet must be 0 or 1");
+            }
+            o.expect_mmtp_gfd_object_last_packet = (v != 0);
+        } else if (k == "--expect-mmtp-gfd-object-last-byte") {
+            const auto v = next_uint();
+            if (v > 1u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-gfd-object-last-byte must be 0 or 1");
+            }
+            o.expect_mmtp_gfd_object_last_byte = (v != 0);
+        } else if (k == "--expect-mmtp-gfd-code-point") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-gfd-code-point must be <= 255");
+            }
+            o.expect_mmtp_gfd_code_point = static_cast<std::uint8_t>(v);
+        } else if (k == "--expect-mmtp-gfd-reserved") {
+            const auto v = next_uint();
+            if (v > 31u) {
+                throw std::runtime_error(
+                    "--expect-mmtp-gfd-reserved must be <= 31");
+            }
+            o.expect_mmtp_gfd_reserved = static_cast<std::uint8_t>(v);
+        } else if (k == "--expect-mmtp-gfd-toi") {
+            const auto v = next_uint();
+            o.expect_mmtp_gfd_toi = static_cast<std::uint32_t>(v);
+        } else if (k == "--expect-mmtp-gfd-start-offset") {
+            o.expect_mmtp_gfd_start_offset = next_uint();
         } else throw std::runtime_error(
             std::string("unknown option: ") + std::string(k));
     }
@@ -948,9 +1596,151 @@ int do_verify(const opts &o) {
                   << o.expect_mmtp_signalling_aggregate_hex.size() << "\n";
         return 2;
     }
+    if (o.strip_mmt_si_length32_envelope && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_length32_envelope && !o.strip_mmtp_signalling_prefix) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope requires "
+                     "--strip-mmtp-signalling-prefix\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_length32_envelope &&
+        o.mmtp_signalling_aggregate_strip_count != 0) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope is incompatible with "
+                     "--strip-mmtp-signalling-aggregate-count\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_length32_envelope &&
+        (!o.expect_mmtp_payload_type.has_value() ||
+         *o.expect_mmtp_payload_type != 2)) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope requires "
+                     "--expect-mmtp-payload-type 2\n";
+        return 2;
+    }
     if (o.strip_mmtp_signalling_prefix && o.strip_mmtp_isobmff_prefix) {
         std::cerr << "verify: --strip-mmtp-signalling-prefix and "
                      "--strip-mmtp-isobmff-prefix are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmtp_signalling_prefix && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmtp-signalling-prefix and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_length32_envelope && o.strip_mmtp_isobmff_prefix) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope and "
+                     "--strip-mmtp-isobmff-prefix are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_length32_envelope && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmt-si-length32-envelope and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 && !o.strip_mmtp_signalling_prefix) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 requires "
+                     "--strip-mmtp-signalling-prefix\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 &&
+        o.mmtp_signalling_aggregate_strip_count != 0) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 is incompatible with "
+                     "--strip-mmtp-signalling-aggregate-count\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 &&
+        (!o.expect_mmtp_payload_type.has_value() ||
+         *o.expect_mmtp_payload_type != 2)) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 requires "
+                     "--expect-mmtp-payload-type 2\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 && o.strip_mmtp_isobmff_prefix) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 and "
+                     "--strip-mmtp-isobmff-prefix are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_descriptor_loop_u32 && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmt-si-descriptor-loop-u32 and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers && !o.strip_mmtp_signalling_prefix) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers requires "
+                     "--strip-mmtp-signalling-prefix\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers &&
+        o.mmtp_signalling_aggregate_strip_count != 0) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers is incompatible with "
+                     "--strip-mmtp-signalling-aggregate-count\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers &&
+        (!o.expect_mmtp_payload_type.has_value() ||
+         *o.expect_mmtp_payload_type != 2)) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers requires "
+                     "--expect-mmtp-payload-type 2\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers && o.strip_mmtp_isobmff_prefix) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers and "
+                     "--strip-mmtp-isobmff-prefix are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_pa_table_headers && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmt-si-pa-table-headers and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 && !o.strip_mmtp_signalling_prefix) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 requires "
+                     "--strip-mmtp-signalling-prefix\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 &&
+        o.mmtp_signalling_aggregate_strip_count != 0) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 is incompatible with "
+                     "--strip-mmtp-signalling-aggregate-count\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 &&
+        (!o.expect_mmtp_payload_type.has_value() ||
+         *o.expect_mmtp_payload_type != 2)) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 requires "
+                     "--expect-mmtp-payload-type 2\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 && o.strip_mmtp_isobmff_prefix) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 and "
+                     "--strip-mmtp-isobmff-prefix are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmt_si_message_header_len32 && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmt-si-message-header-len32 and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
+        return 2;
+    }
+    if (o.strip_mmtp_isobmff_prefix && o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --strip-mmtp-isobmff-prefix and "
+                     "--strip-mmtp-gfd-header are mutually exclusive\n";
         return 2;
     }
     if (o.strip_mmtp_isobmff_prefix && !o.strip_mmtp_word0) {
@@ -963,6 +1753,18 @@ int do_verify(const opts &o) {
          *o.expect_mmtp_payload_type != 0)) {
         std::cerr << "verify: --strip-mmtp-isobmff-prefix requires "
                      "--expect-mmtp-payload-type 0 (ISOBMFF mode)\n";
+        return 2;
+    }
+    if (o.strip_mmtp_gfd_header && !o.strip_mmtp_word0) {
+        std::cerr << "verify: --strip-mmtp-gfd-header requires "
+                     "--strip-mmtp-word0\n";
+        return 2;
+    }
+    if (o.strip_mmtp_gfd_header &&
+        (!o.expect_mmtp_payload_type.has_value() ||
+         *o.expect_mmtp_payload_type != 1)) {
+        std::cerr << "verify: --strip-mmtp-gfd-header requires "
+                     "--expect-mmtp-payload-type 1 (GFD mode)\n";
         return 2;
     }
     if (o.expect_mmtp_isobmff_payload_length_excluding.has_value() &&
@@ -1027,6 +1829,19 @@ int do_verify(const opts &o) {
         o.expect_mmtp_isobmff_du_offset.has_value() ||
         o.expect_mmtp_isobmff_du_subsample_priority.has_value() ||
         o.expect_mmtp_isobmff_du_dependency_counter.has_value();
+    const bool any_gfd_expect =
+        o.expect_mmtp_gfd_session_last.has_value() ||
+        o.expect_mmtp_gfd_object_last_packet.has_value() ||
+        o.expect_mmtp_gfd_object_last_byte.has_value() ||
+        o.expect_mmtp_gfd_code_point.has_value() ||
+        o.expect_mmtp_gfd_reserved.has_value() ||
+        o.expect_mmtp_gfd_toi.has_value() ||
+        o.expect_mmtp_gfd_start_offset.has_value();
+    if (any_gfd_expect && !o.strip_mmtp_gfd_header) {
+        std::cerr << "verify: --expect-mmtp-gfd-* fields require "
+                     "--strip-mmtp-gfd-header\n";
+        return 2;
+    }
     if (o.strip_mmtp_isobmff_du_header && !o.strip_mmtp_isobmff_prefix) {
         std::cerr << "verify: --strip-mmtp-isobmff-du-header requires "
                      "--strip-mmtp-isobmff-prefix\n";
@@ -1058,6 +1873,362 @@ int do_verify(const opts &o) {
         ? std::vector<std::string>{}
         : split_csv(o.expected);
 
+    if (!o.expect_mmt_si_body_byte_lengths.empty()) {
+        if (!o.strip_mmt_si_length32_envelope) {
+            std::cerr << "verify: --expect-mmt-si-body-byte-length requires "
+                         "--strip-mmt-si-length32-envelope\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-body-byte-length requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_body_byte_lengths.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-body-byte-length values, got "
+                      << o.expect_mmt_si_body_byte_lengths.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_descriptor_loop_lengths.empty()) {
+        if (!o.strip_mmt_si_descriptor_loop_u32) {
+            std::cerr << "verify: --expect-mmt-si-descriptor-loop-length requires "
+                         "--strip-mmt-si-descriptor-loop-u32\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-descriptor-loop-length requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_descriptor_loop_lengths.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-descriptor-loop-length values, got "
+                      << o.expect_mmt_si_descriptor_loop_lengths.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_message_byte_lengths.empty()) {
+        if (!o.strip_mmt_si_message_header_len32) {
+            std::cerr << "verify: --expect-mmt-si-message-byte-length requires "
+                         "--strip-mmt-si-message-header-len32\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-message-byte-length requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_message_byte_lengths.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-message-byte-length values, got "
+                      << o.expect_mmt_si_message_byte_lengths.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_pa_number_of_tables.empty()) {
+        if (!o.strip_mmt_si_pa_table_headers) {
+            std::cerr << "verify: --expect-mmt-si-pa-number-of-tables requires "
+                         "--strip-mmt-si-pa-table-headers\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-pa-number-of-tables requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_pa_number_of_tables.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-pa-number-of-tables values, got "
+                      << o.expect_mmt_si_pa_number_of_tables.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_mpt_table_id.empty() ||
+        !o.expect_mmt_si_mpt_table_length.empty()) {
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-mpt-table-* requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (!o.expect_mmt_si_mpt_table_id.empty() &&
+            o.expect_mmt_si_mpt_table_id.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-mpt-table-id values, got "
+                      << o.expect_mmt_si_mpt_table_id.size() << "\n";
+            return 2;
+        }
+        if (!o.expect_mmt_si_mpt_table_length.empty() &&
+            o.expect_mmt_si_mpt_table_length.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-mpt-table-length values, got "
+                      << o.expect_mmt_si_mpt_table_length.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_plt_table_id.empty() ||
+        !o.expect_mmt_si_plt_table_length.empty()) {
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-plt-table-* requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (!o.expect_mmt_si_plt_table_id.empty() &&
+            o.expect_mmt_si_plt_table_id.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-plt-table-id values, got "
+                      << o.expect_mmt_si_plt_table_id.size() << "\n";
+            return 2;
+        }
+        if (!o.expect_mmt_si_plt_table_length.empty() &&
+            o.expect_mmt_si_plt_table_length.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-plt-table-length values, got "
+                      << o.expect_mmt_si_plt_table_length.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (o.strip_mmt_si_mpt_table && o.strip_mmt_si_plt_table) {
+        std::cerr << "verify: --strip-mmt-si-mpt-table and --strip-mmt-si-plt-table "
+                     "are mutually exclusive\n";
+        return 2;
+    }
+
+    if (!o.expect_mmt_si_mpt_table_body_num_assets.empty()) {
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-mpt-table-body-num-assets requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_mpt_table_body_num_assets.size() !=
+            expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-mpt-table-body-num-assets values, got "
+                      << o.expect_mmt_si_mpt_table_body_num_assets.size() << "\n";
+            return 2;
+        }
+    }
+
+    const auto check_mpt_asset_expect_count =
+        [&](const char* flag, const std::vector<std::uint32_t>& vals) {
+            if (vals.empty()) {
+                return 0;
+            }
+            if (expected_hex.empty()) {
+                std::cerr << "verify: " << flag
+                          << " requires --expected-payloads\n";
+                return 2;
+            }
+            if (vals.size() != expected_hex.size()) {
+                std::cerr << "verify: need " << expected_hex.size() << " " << flag
+                          << " values, got " << vals.size() << "\n";
+                return 2;
+            }
+            return 0;
+        };
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-id-length",
+            o.expect_mmt_si_mpt_asset_id_length);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-asset-id",
+            o.expect_mmt_si_mpt_asset_asset_id);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-location-count",
+            o.expect_mmt_si_mpt_asset_location_count);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-location-type",
+            o.expect_mmt_si_mpt_asset_location_type);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-packet-id",
+            o.expect_mmt_si_mpt_asset_packet_id);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-ipv4-dst-port",
+            o.expect_mmt_si_mpt_asset_ipv4_dst_port);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-ipv6-dst-port",
+            o.expect_mmt_si_mpt_asset_ipv6_dst_port);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_mpt_asset_expect_count(
+            "--expect-mmt-si-mpt-asset-descriptors-length",
+            o.expect_mmt_si_mpt_asset_descriptors_length);
+        rc != 0) {
+        return rc;
+    }
+
+    if (!o.expect_mmt_si_plt_table_body_num_packages.empty()) {
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-plt-table-body-num-packages "
+                         "requires --expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_plt_table_body_num_packages.size() !=
+            expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-plt-table-body-num-packages values, got "
+                      << o.expect_mmt_si_plt_table_body_num_packages.size() << "\n";
+            return 2;
+        }
+    }
+
+    const auto check_plt_delivery_expect_count =
+        [&](const char* flag, const std::vector<std::uint32_t>& vals) {
+            if (vals.empty()) {
+                return 0;
+            }
+            if (expected_hex.empty()) {
+                std::cerr << "verify: " << flag
+                          << " requires --expected-payloads\n";
+                return 2;
+            }
+            if (vals.size() != expected_hex.size()) {
+                std::cerr << "verify: need " << expected_hex.size() << " " << flag
+                          << " values, got " << vals.size() << "\n";
+                return 2;
+            }
+            return 0;
+        };
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-table-body-num-ip-delivery",
+            o.expect_mmt_si_plt_table_body_num_ip_delivery);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-location-type",
+            o.expect_mmt_si_plt_delivery_info_location_type);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-descriptor-loop-length",
+            o.expect_mmt_si_plt_delivery_info_descriptor_loop_length);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-ipv4-dst-port",
+            o.expect_mmt_si_plt_delivery_info_ipv4_dst_port);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-ipv6-dst-port",
+            o.expect_mmt_si_plt_delivery_info_ipv6_dst_port);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-length",
+            o.expect_mmt_si_plt_delivery_info_url_length);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-3-byte0",
+            o.expect_mmt_si_plt_delivery_info_url_3_byte0);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-3-byte1",
+            o.expect_mmt_si_plt_delivery_info_url_3_byte1);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-3-byte2",
+            o.expect_mmt_si_plt_delivery_info_url_3_byte2);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-4-byte0",
+            o.expect_mmt_si_plt_delivery_info_url_4_byte0);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-4-byte1",
+            o.expect_mmt_si_plt_delivery_info_url_4_byte1);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-4-byte2",
+            o.expect_mmt_si_plt_delivery_info_url_4_byte2);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-delivery-info-url-4-byte3",
+            o.expect_mmt_si_plt_delivery_info_url_4_byte3);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-id-length",
+            o.expect_mmt_si_plt_package_id_length);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-mmt-package-id",
+            o.expect_mmt_si_plt_package_mmt_package_id);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-location-type",
+            o.expect_mmt_si_plt_package_location_type);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-packet-id",
+            o.expect_mmt_si_plt_package_packet_id);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-ipv4-dst-port",
+            o.expect_mmt_si_plt_package_ipv4_dst_port);
+        rc != 0) {
+        return rc;
+    }
+    if (const int rc = check_plt_delivery_expect_count(
+            "--expect-mmt-si-plt-package-ipv6-dst-port",
+            o.expect_mmt_si_plt_package_ipv6_dst_port);
+        rc != 0) {
+        return rc;
+    }
+
     std::span<const std::byte> cur(sink);
     std::size_t idx = 0;
     while (!cur.empty()) {
@@ -1075,8 +2246,24 @@ int do_verify(const opts &o) {
             return 1;
         }
 
+        if (o.expect_alp_payload_config.has_value() &&
+            *o.expect_alp_payload_config != alp.value.payload_config) {
+            std::cerr << "verify: TLV #" << idx << " ALP payload_config want "
+                      << (*o.expect_alp_payload_config ? 1 : 0) << " got "
+                      << (alp.value.payload_config ? 1 : 0) << "\n";
+            return 1;
+        }
+        if (o.expect_alp_header_mode.has_value() &&
+            *o.expect_alp_header_mode != alp.value.header_mode) {
+            std::cerr << "verify: TLV #" << idx << " ALP header_mode want "
+                      << (*o.expect_alp_header_mode ? 1 : 0) << " got "
+                      << (alp.value.header_mode ? 1 : 0) << "\n";
+            return 1;
+        }
+
         const auto alp_body = alp.value.payload;
         std::span<const std::byte> work(alp_body);
+        std::optional<std::uint8_t> peeled_mmtp_payload_type;
 
         if (o.strip_mmtp_word0) {
             if (work.size() < k_mmtp_word0_bytes) {
@@ -1107,6 +2294,7 @@ int do_verify(const opts &o) {
                           << mhd.value.packet_id << "\n";
                 return 1;
             }
+            peeled_mmtp_payload_type = mhd.value.payload_type;
             work = work.subspan(k_mmtp_word0_bytes);
         }
 
@@ -1352,6 +2540,3920 @@ int do_verify(const opts &o) {
             }
         }
 
+        if (o.strip_mmt_si_message_header_len32) {
+            if (!peeled_mmtp_payload_type.has_value() ||
+                *peeled_mmtp_payload_type != 2u) {
+                std::cerr << "verify: TLV #" << idx
+                          << " --strip-mmt-si-message-header-len32 requires MMTP payload_type 2 "
+                             "on stripped word-0\n";
+                return 1;
+            }
+            auto mhd = atsc3::mmt_si_message_header_len32::decode(work);
+            if (!mhd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_message_header_len32 decode: " << mhd.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_message_byte_lengths.empty()) {
+                const auto want = o.expect_mmt_si_message_byte_lengths[idx];
+                if (want != mhd.value.message_byte_length) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_message_header_len32 message_byte_length want "
+                              << want << " got " << mhd.value.message_byte_length << "\n";
+                    return 1;
+                }
+            }
+            work = mhd.value.payload;
+        }
+
+        if (o.strip_mmt_si_length32_envelope) {
+            if (!peeled_mmtp_payload_type.has_value() ||
+                *peeled_mmtp_payload_type != 2u) {
+                std::cerr << "verify: TLV #" << idx
+                          << " --strip-mmt-si-length32-envelope requires MMTP payload_type 2 "
+                             "on stripped word-0\n";
+                return 1;
+            }
+            auto envd = atsc3::mmt_si_length32_envelope::decode(work);
+            if (!envd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_length32_envelope decode: " << envd.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_body_byte_lengths.empty()) {
+                const auto want = o.expect_mmt_si_body_byte_lengths[idx];
+                if (want != envd.value.body_byte_length) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_length32_envelope body_byte_length want "
+                              << want << " got " << envd.value.body_byte_length << "\n";
+                    return 1;
+                }
+            }
+            work = envd.value.payload;
+        }
+
+        if (o.strip_mmt_si_descriptor_loop_u32) {
+            if (!peeled_mmtp_payload_type.has_value() ||
+                *peeled_mmtp_payload_type != 2u) {
+                std::cerr << "verify: TLV #" << idx
+                          << " --strip-mmt-si-descriptor-loop-u32 requires MMTP payload_type 2 "
+                             "on stripped word-0\n";
+                return 1;
+            }
+            auto lpd = atsc3::mmt_si_descriptor_loop_u32::decode(work);
+            if (!lpd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_descriptor_loop_u32 decode: " << lpd.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_descriptor_loop_lengths.empty()) {
+                const auto want = o.expect_mmt_si_descriptor_loop_lengths[idx];
+                if (want != lpd.value.loop_length) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_descriptor_loop_u32 loop_length want "
+                              << want << " got " << lpd.value.loop_length << "\n";
+                    return 1;
+                }
+            }
+            if (work.size() < sizeof(std::uint32_t) +
+                    static_cast<std::size_t>(lpd.value.loop_length)) {
+                std::cerr << "verify: TLV #" << idx
+                          << " ALP opaque too short for mmt_si_descriptor_loop_u32 body\n";
+                return 1;
+            }
+            work = work.subspan(
+                sizeof(std::uint32_t),
+                static_cast<std::size_t>(lpd.value.loop_length));
+        }
+
+        if (o.strip_mmt_si_pa_table_headers) {
+            if (!peeled_mmtp_payload_type.has_value() ||
+                *peeled_mmtp_payload_type != 2u) {
+                std::cerr << "verify: TLV #" << idx
+                          << " --strip-mmt-si-pa-table-headers requires MMTP payload_type 2 "
+                             "on stripped word-0\n";
+                return 1;
+            }
+            auto pad = atsc3::mmt_si_pa_table_headers::decode(work);
+            if (!pad.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_pa_table_headers decode: " << pad.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_pa_number_of_tables.empty()) {
+                const auto want = o.expect_mmt_si_pa_number_of_tables[idx];
+                if (want != static_cast<std::uint32_t>(pad.value.number_of_tables)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_pa_table_headers number_of_tables want "
+                              << want << " got "
+                              << static_cast<unsigned>(pad.value.number_of_tables)
+                              << "\n";
+                    return 1;
+                }
+            }
+            if (work.size() < pad.bytes_consumed) {
+                std::cerr << "verify: TLV #" << idx
+                          << " ALP opaque too short for mmt_si_pa_table_headers peel\n";
+                return 1;
+            }
+            work = work.subspan(pad.bytes_consumed);
+        }
+
+        if (!o.expect_mmt_si_mpt_table_id.empty() ||
+            !o.expect_mmt_si_mpt_table_length.empty() ||
+            !o.expect_mmt_si_mpt_table_body_num_assets.empty() ||
+            !o.expect_mmt_si_mpt_asset_id_length.empty() ||
+            !o.expect_mmt_si_mpt_asset_asset_id.empty() ||
+            !o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+            !o.expect_mmt_si_mpt_asset_id16_byte1.empty() ||
+            !o.expect_mmt_si_mpt_asset_location_count.empty() ||
+            !o.expect_mmt_si_mpt_asset_location_type.empty() ||
+            !o.expect_mmt_si_mpt_asset_packet_id.empty() ||
+            !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() ||
+            !o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+            !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty() ||
+            !o.expect_mmt_si_mpt_asset_descriptors_length.empty() ||
+            o.strip_mmt_si_mpt_table) {
+            auto mptd = atsc3::mmt_si_mpt_table::decode(work);
+            if (!mptd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_mpt_table decode: " << mptd.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_mpt_table_id.empty()) {
+                const auto want = o.expect_mmt_si_mpt_table_id[idx];
+                if (want != static_cast<std::uint32_t>(mptd.value.table_id)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_mpt_table table_id want " << want
+                              << " got "
+                              << static_cast<unsigned>(mptd.value.table_id)
+                              << "\n";
+                    return 1;
+                }
+            }
+            if (!o.expect_mmt_si_mpt_table_length.empty()) {
+                const auto want = o.expect_mmt_si_mpt_table_length[idx];
+                if (want != static_cast<std::uint32_t>(mptd.value.table_length)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_mpt_table table_length want " << want
+                              << " got "
+                              << static_cast<unsigned>(mptd.value.table_length)
+                              << "\n";
+                    return 1;
+                }
+            }
+            if (work.size() < mptd.bytes_consumed) {
+                std::cerr << "verify: TLV #" << idx
+                          << " ALP opaque too short for mmt_si_mpt_table\n";
+                return 1;
+            }
+            const bool check_mpt_body =
+                !o.expect_mmt_si_mpt_table_body_num_assets.empty() ||
+                !o.expect_mmt_si_mpt_asset_id_length.empty() ||
+                !o.expect_mmt_si_mpt_asset_asset_id.empty() ||
+                !o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                !o.expect_mmt_si_mpt_asset_id16_byte1.empty() ||
+                !o.expect_mmt_si_mpt_asset_location_count.empty() ||
+                !o.expect_mmt_si_mpt_asset_location_type.empty() ||
+                !o.expect_mmt_si_mpt_asset_packet_id.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty() ||
+                !o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty() ||
+                !o.expect_mmt_si_mpt_asset_descriptors_length.empty();
+            if (check_mpt_body) {
+                auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                    mptd.value.payload);
+                if (!pref.ok) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_mpt_table_body_prefix decode: "
+                              << pref.error << "\n";
+                    return 1;
+                }
+                if (!o.expect_mmt_si_mpt_table_body_num_assets.empty()) {
+                    const auto want =
+                        o.expect_mmt_si_mpt_table_body_num_assets[idx];
+                    if (want != static_cast<std::uint32_t>(
+                            pref.value.number_of_assets)) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " mmt_si_mpt_table_body_prefix "
+                                     "number_of_assets want "
+                                  << want << " got "
+                                  << static_cast<unsigned>(
+                                         pref.value.number_of_assets)
+                                  << "\n";
+                        return 1;
+                    }
+                }
+                if (                    !o.expect_mmt_si_mpt_asset_asset_id.empty() ||
+                    !o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                    !o.expect_mmt_si_mpt_asset_id16_byte1.empty() ||
+                    !o.expect_mmt_si_mpt_asset_id_length.empty() ||
+                    !o.expect_mmt_si_mpt_asset_location_count.empty() ||
+                    !o.expect_mmt_si_mpt_asset_location_type.empty() ||
+                    !o.expect_mmt_si_mpt_asset_packet_id.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty() ||
+                    !o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty() ||
+                    !o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                    const auto asset_span =
+                        mptd.value.payload.subspan(pref.bytes_consumed);
+                    if ((!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                         !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) &&
+                        (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty() ||
+                         !o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty())) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id16_location_ipv6_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16_location_ipv6_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_src_addr_3[idx];
+                            if (want != asset.value.ipv6_src_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "ipv6_src_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_src_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3[idx];
+                            if (want != asset.value.ipv6_dst_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "ipv6_dst_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_dst_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if ((!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                         !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) &&
+                        (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                         !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty())) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id16_location_ipv4_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16_location_ipv4_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_src_addr[idx];
+                            if (want != asset.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_addr[idx];
+                            if (want != asset.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                         !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty())) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv4_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv4_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want = o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_src_addr[idx];
+                            if (want != asset.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_addr[idx];
+                            if (want != asset.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty() ||
+                         !o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty())) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv6_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv6_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_src_addr_3[idx];
+                            if (want != asset.value.ipv6_src_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "ipv6_src_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_src_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3[idx];
+                            if (want != asset.value.ipv6_dst_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "ipv6_dst_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_dst_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        !o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv6::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv6 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                         !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty())) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv4_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv4_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want = o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_src_addr[idx];
+                            if (want != asset.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_addr[idx];
+                            if (want != asset.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty() ||
+                        !o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_location_ipv4_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_location_ipv4_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_src_addr[idx];
+                            if (want != asset.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_addr[idx];
+                            if (want != asset.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << asset.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if ((!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                         !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) &&
+                        !o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                        std::vector<std::byte> asset_buf(asset_span.begin(),
+                                                         asset_span.end());
+                        if (asset_buf.size() == 50u) {
+                            asset_buf.push_back(std::byte{0});
+                        }
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id16_location_ipv6::decode(
+                                asset_buf);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16_location_ipv6 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv6 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if ((!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                         !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) &&
+                        !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id16_location_ipv4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16_location_ipv4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_location_ipv4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_location_ipv4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_location_ipv4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty() ||
+                        !o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_location_ipv6_nz::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_location_ipv6_nz decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_src_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_src_addr_3[idx];
+                            if (want != asset.value.ipv6_src_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "ipv6_src_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_src_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_addr_3[idx];
+                            if (want != asset.value.ipv6_dst_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "ipv6_dst_addr_3 want "
+                                          << want << " got "
+                                          << asset.value.ipv6_dst_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6_nz "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_location_ipv6::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_location_ipv6 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location_ipv6 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_location_type.empty() ||
+                        !o.expect_mmt_si_mpt_asset_packet_id.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_location0::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_location0 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location0 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location0 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location0 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_packet_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_packet_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.packet_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location0 "
+                                             "packet_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.packet_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_location0 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        !o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv6::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv6 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv6 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                        !o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_location_ipv4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_location_ipv4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_location_ipv4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                        !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                        auto asset = atsc3::mmt_si_mpt_asset_id16::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16 "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16 "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                        auto asset = atsc3::mmt_si_mpt_asset_id8::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8 asset_id "
+                                             "want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if ((!o.expect_mmt_si_mpt_asset_id16_byte0.empty() ||
+                        !o.expect_mmt_si_mpt_asset_id16_byte1.empty()) &&
+                               !o.expect_mmt_si_mpt_asset_descriptors_length.empty() &&
+                               o.expect_mmt_si_mpt_asset_descriptors_length[idx] != 0u &&
+                               o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                               o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id16_descriptors4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id16_descriptors4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_descriptors4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte0.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_descriptors4 "
+                                             "asset_id_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id16_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_descriptors4 "
+                                             "asset_id_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_descriptors4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id16_descriptors4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                               !o.expect_mmt_si_mpt_asset_descriptors_length.empty() &&
+                               o.expect_mmt_si_mpt_asset_descriptors_length[idx] != 0u &&
+                               o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_location_type.empty() &&
+                               o.expect_mmt_si_mpt_asset_id16_byte0.empty() &&
+                               o.expect_mmt_si_mpt_asset_id16_byte1.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_id8_descriptors4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_id8_descriptors4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_descriptors4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_asset_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_asset_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_descriptors4 "
+                                             "asset_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_descriptors4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_id8_descriptors4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty() &&
+                               o.expect_mmt_si_mpt_asset_descriptors_length[idx] != 0u &&
+                               o.expect_mmt_si_mpt_asset_asset_id.empty() &&
+                               o.expect_mmt_si_mpt_asset_ipv4_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_ipv6_dst_port.empty() &&
+                               o.expect_mmt_si_mpt_asset_location_type.empty()) {
+                        auto asset =
+                            atsc3::mmt_si_mpt_asset_descriptors4::decode(asset_span);
+                        if (!asset.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset_descriptors4 decode: "
+                                      << asset.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_descriptors4 "
+                                             "asset_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_location_count[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.location_count)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_descriptors4 "
+                                             "location_count want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.location_count)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    asset.value.asset_descriptors_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_mpt_asset_descriptors4 "
+                                             "asset_descriptors_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 asset.value.asset_descriptors_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else {
+                    auto asset = atsc3::mmt_si_mpt_asset::decode(asset_span);
+                    if (!asset.ok) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " mmt_si_mpt_asset decode: "
+                                  << asset.error << "\n";
+                        return 1;
+                    }
+                    if (!o.expect_mmt_si_mpt_asset_id_length.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_mpt_asset_id_length[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                asset.value.asset_id_length)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset asset_id_length want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             asset.value.asset_id_length)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    if (!o.expect_mmt_si_mpt_asset_location_count.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_mpt_asset_location_count[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                asset.value.location_count)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset location_count want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             asset.value.location_count)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    if (!o.expect_mmt_si_mpt_asset_descriptors_length.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_mpt_asset_descriptors_length[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                asset.value.asset_descriptors_length)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_mpt_asset asset_descriptors_length "
+                                         "want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             asset.value.asset_descriptors_length)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    }
+                }
+            }
+            if (o.strip_mmt_si_mpt_table) {
+                work = work.subspan(mptd.bytes_consumed);
+            }
+        }
+
+        if (!o.expect_mmt_si_plt_table_id.empty() ||
+            !o.expect_mmt_si_plt_table_length.empty() ||
+            !o.expect_mmt_si_plt_table_body_num_packages.empty() ||
+            !o.expect_mmt_si_plt_table_body_num_ip_delivery.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_location_type.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_descriptor_loop_length.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_ipv4_dst_port.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_ipv4_src_addr.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_ipv6_dst_port.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_length.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_3_byte0.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_3_byte1.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_3_byte2.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_4_byte0.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_4_byte1.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_4_byte2.empty() ||
+            !o.expect_mmt_si_plt_delivery_info_url_4_byte3.empty() ||
+            !o.expect_mmt_si_plt_package_id_length.empty() ||
+            !o.expect_mmt_si_plt_package_mmt_package_id.empty() ||
+            !o.expect_mmt_si_plt_package_location_type.empty() ||
+            !o.expect_mmt_si_plt_package_packet_id.empty() ||
+            !o.expect_mmt_si_plt_package_ipv4_dst_port.empty() ||
+            !o.expect_mmt_si_plt_package_ipv4_src_addr.empty() ||
+            !o.expect_mmt_si_plt_package_ipv4_dst_addr.empty() ||
+            !o.expect_mmt_si_plt_package_ipv6_dst_port.empty() ||
+            !o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty() ||
+            !o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty() ||
+            o.strip_mmt_si_plt_table) {
+            auto pltd = atsc3::mmt_si_plt_table::decode(work);
+            if (!pltd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " mmt_si_plt_table decode: " << pltd.error << "\n";
+                return 1;
+            }
+            if (!o.expect_mmt_si_plt_table_id.empty()) {
+                const auto want = o.expect_mmt_si_plt_table_id[idx];
+                if (want != static_cast<std::uint32_t>(pltd.value.table_id)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_plt_table table_id want " << want
+                              << " got "
+                              << static_cast<unsigned>(pltd.value.table_id)
+                              << "\n";
+                    return 1;
+                }
+            }
+            if (!o.expect_mmt_si_plt_table_length.empty()) {
+                const auto want = o.expect_mmt_si_plt_table_length[idx];
+                if (want != static_cast<std::uint32_t>(pltd.value.table_length)) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_plt_table table_length want " << want
+                              << " got "
+                              << static_cast<unsigned>(pltd.value.table_length)
+                              << "\n";
+                    return 1;
+                }
+            }
+            if (work.size() < pltd.bytes_consumed) {
+                std::cerr << "verify: TLV #" << idx
+                          << " ALP opaque too short for mmt_si_plt_table\n";
+                return 1;
+            }
+            const bool check_plt_body =
+                !o.expect_mmt_si_plt_table_body_num_packages.empty() ||
+                !o.expect_mmt_si_plt_table_body_num_ip_delivery.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_location_type.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_descriptor_loop_length.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_ipv4_dst_port.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_ipv4_src_addr.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_ipv6_dst_port.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_length.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_3_byte0.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_3_byte1.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_3_byte2.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_4_byte0.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_4_byte1.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_4_byte2.empty() ||
+                !o.expect_mmt_si_plt_delivery_info_url_4_byte3.empty() ||
+                !o.expect_mmt_si_plt_package_id_length.empty() ||
+                !o.expect_mmt_si_plt_package_mmt_package_id.empty() ||
+                !o.expect_mmt_si_plt_package_location_type.empty() ||
+                !o.expect_mmt_si_plt_package_packet_id.empty() ||
+                !o.expect_mmt_si_plt_package_ipv4_dst_port.empty() ||
+                !o.expect_mmt_si_plt_package_ipv4_src_addr.empty() ||
+                !o.expect_mmt_si_plt_package_ipv4_dst_addr.empty() ||
+                !o.expect_mmt_si_plt_package_ipv6_dst_port.empty() ||
+                !o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty() ||
+                !o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty();
+            if (check_plt_body) {
+                auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                    pltd.value.payload);
+                if (!pref.ok) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_plt_table_body_prefix decode: "
+                              << pref.error << "\n";
+                    return 1;
+                }
+                if (!o.expect_mmt_si_plt_table_body_num_packages.empty()) {
+                    const auto want =
+                        o.expect_mmt_si_plt_table_body_num_packages[idx];
+                    if (want != static_cast<std::uint32_t>(
+                            pref.value.num_of_packages)) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " mmt_si_plt_table_body_prefix "
+                                     "num_of_packages want "
+                                  << want << " got "
+                                  << static_cast<unsigned>(
+                                         pref.value.num_of_packages)
+                                  << "\n";
+                        return 1;
+                    }
+                }
+                if (!o.expect_mmt_si_plt_table_body_num_ip_delivery.empty()) {
+                    const auto want =
+                        o.expect_mmt_si_plt_table_body_num_ip_delivery[idx];
+                    if (want != static_cast<std::uint32_t>(
+                            pref.value.num_of_ip_delivery)) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " mmt_si_plt_table_body_prefix "
+                                     "num_of_ip_delivery want "
+                                  << want << " got "
+                                  << static_cast<unsigned>(
+                                         pref.value.num_of_ip_delivery)
+                                  << "\n";
+                        return 1;
+                    }
+                }
+                if (!o.expect_mmt_si_plt_package_mmt_package_id.empty() ||
+                    !o.expect_mmt_si_plt_package_id_length.empty() ||
+                    !o.expect_mmt_si_plt_package_location_type.empty() ||
+                    !o.expect_mmt_si_plt_package_packet_id.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv4_dst_port.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv4_src_addr.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv4_dst_addr.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv6_dst_port.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty() ||
+                    !o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty()) {
+                    const auto entry_span =
+                        pltd.value.payload.subspan(pref.bytes_consumed);
+                    if (!o.expect_mmt_si_plt_package_mmt_package_id.empty() &&
+                        (!o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty() ||
+                         !o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty())) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_id8_location_ipv6_nz::decode(
+                                entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                         "decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_mmt_package_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "MMT_package_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_src_addr_3[idx];
+                            if (want != entry.value.ipv6_src_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "ipv6_src_addr_3 want "
+                                          << want << " got "
+                                          << entry.value.ipv6_src_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_addr_3[idx];
+                            if (want != entry.value.ipv6_dst_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "ipv6_dst_addr_3 want "
+                                          << want << " got "
+                                          << entry.value.ipv6_dst_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_mmt_package_id.empty() &&
+                        !o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_id8_location_ipv6::decode(
+                                entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_id8_location_ipv6 "
+                                         "decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6 "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_mmt_package_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6 "
+                                             "MMT_package_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_mmt_package_id.empty() &&
+                        (!o.expect_mmt_si_plt_package_ipv4_src_addr.empty() ||
+                         !o.expect_mmt_si_plt_package_ipv4_dst_addr.empty())) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_id8_location_ipv4_nz::decode(
+                                entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                         "decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_mmt_package_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "MMT_package_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_src_addr[idx];
+                            if (want != entry.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << entry.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_addr[idx];
+                            if (want != entry.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << entry.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_mmt_package_id.empty() &&
+                        !o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_id8_location_ipv4::decode(
+                                entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_id8_location_ipv4 "
+                                         "decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4 "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_mmt_package_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4 "
+                                             "MMT_package_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8_location_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_id8::decode(entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_id8 decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8 "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_mmt_package_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_mmt_package_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8 "
+                                             "MMT_package_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_packet_id.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_packet_id[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.packet_id)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_id8 "
+                                             "packet_id want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.packet_id)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_ipv4_src_addr.empty() ||
+                        !o.expect_mmt_si_plt_package_ipv4_dst_addr.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_ipv4_nz::decode(entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_ipv4_nz decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4_nz "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_src_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_src_addr[idx];
+                            if (want != entry.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << entry.value.ipv4_src_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_addr.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_addr[idx];
+                            if (want != entry.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << entry.value.ipv4_dst_addr << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_ipv4::decode(entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_ipv4 decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4 "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv4_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv4_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty() ||
+                        !o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_ipv6_nz::decode(entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_ipv6_nz decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6_nz "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_src_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_src_addr_3[idx];
+                            if (want != entry.value.ipv6_src_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6_nz "
+                                             "ipv6_src_addr_3 want "
+                                          << want << " got "
+                                          << entry.value.ipv6_src_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_addr_3.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_addr_3[idx];
+                            if (want != entry.value.ipv6_dst_addr_3) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6_nz "
+                                             "ipv6_dst_addr_3 want "
+                                          << want << " got "
+                                          << entry.value.ipv6_dst_addr_3 << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                        auto entry =
+                            atsc3::mmt_si_plt_package_entry_ipv6::decode(entry_span);
+                        if (!entry.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry_ipv6 decode: "
+                                      << entry.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_id_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.MMT_package_id_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6 "
+                                             "MMT_package_id_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.MMT_package_id_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_location_type[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    entry.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 entry.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_package_ipv6_dst_port.empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_package_ipv6_dst_port[idx];
+                            if (want != static_cast<std::uint32_t>(entry.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_package_entry_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(entry.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else {
+                    auto entry =
+                        atsc3::mmt_si_plt_package_entry::decode(entry_span);
+                    if (!entry.ok) {
+                        std::cerr << "verify: TLV #" << idx
+                                  << " mmt_si_plt_package_entry decode: "
+                                  << entry.error << "\n";
+                        return 1;
+                    }
+                    if (!o.expect_mmt_si_plt_package_id_length.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_plt_package_id_length[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                entry.value.MMT_package_id_length)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry "
+                                         "MMT_package_id_length want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             entry.value.MMT_package_id_length)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    if (!o.expect_mmt_si_plt_package_location_type.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_plt_package_location_type[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                entry.value.location_type)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry "
+                                         "location_type want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             entry.value.location_type)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    if (!o.expect_mmt_si_plt_package_packet_id.empty()) {
+                        const auto want =
+                            o.expect_mmt_si_plt_package_packet_id[idx];
+                        if (want != static_cast<std::uint32_t>(
+                                entry.value.packet_id)) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_package_entry packet_id "
+                                         "want "
+                                      << want << " got "
+                                      << static_cast<unsigned>(
+                                             entry.value.packet_id)
+                                      << "\n";
+                            return 1;
+                        }
+                    }
+                    }
+                } else if (!o.expect_mmt_si_plt_delivery_info_location_type.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                         .empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_ipv4_dst_port.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_ipv4_src_addr.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_ipv6_dst_port.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_url_3_byte0.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_url_4_byte0.empty() ||
+                    !o.expect_mmt_si_plt_delivery_info_url_length.empty()) {
+                    const auto delivery_span =
+                        pltd.value.payload.subspan(pref.bytes_consumed);
+                    if (!o.expect_mmt_si_plt_delivery_info_ipv4_src_addr
+                             .empty() ||
+                        !o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr
+                             .empty()) {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info_ipv4_nz::decode(
+                                delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_ipv4_nz decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4_nz "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_ipv4_src_addr
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_ipv4_src_addr
+                                    [idx];
+                            if (want != delivery.value.ipv4_src_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4_nz "
+                                             "ipv4_src_addr want "
+                                          << want << " got "
+                                          << delivery.value.ipv4_src_addr
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_ipv4_dst_addr
+                                    [idx];
+                            if (want != delivery.value.ipv4_dst_addr) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4_nz "
+                                             "ipv4_dst_addr want "
+                                          << want << " got "
+                                          << delivery.value.ipv4_dst_addr
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_ipv4_dst_port
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_ipv4_dst_port
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4_nz "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4_nz "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_delivery_info_ipv4_dst_port
+                             .empty()) {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info_ipv4::decode(
+                                delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_ipv4 decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_ipv4_dst_port
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_ipv4_dst_port
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv4 "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_delivery_info_ipv6_dst_port
+                                  .empty()) {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info_ipv6::decode(
+                                delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_ipv6 decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv6 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_ipv6_dst_port
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_ipv6_dst_port
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.dst_port)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv6 "
+                                             "dst_port want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.dst_port)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_ipv6 "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_delivery_info_url_4_byte0
+                                  .empty()) {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info_url_4::decode(
+                                delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_url_4 decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "url_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_4_byte0
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_4_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "url_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_4_byte1
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_4_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "url_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_4_byte2
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_4_byte2[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte2)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "url_byte2 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte2)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_4_byte3
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_4_byte3[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte3)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "url_byte3 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte3)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_4 "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_delivery_info_url_3_byte0
+                                  .empty()) {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info_url_3::decode(
+                                delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_url_3 decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "url_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_3_byte0
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_3_byte0[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte0)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "url_byte0 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte0)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_3_byte1
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_3_byte1[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte1)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "url_byte1 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte1)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_3_byte2
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_3_byte2[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_byte2)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "url_byte2 want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_byte2)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url_3 "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else if (!o.expect_mmt_si_plt_delivery_info_url_length
+                                  .empty()) {
+                        auto delivery = atsc3::mmt_si_plt_delivery_info_url::decode(
+                            delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info_url decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_url_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_url_length[idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.url_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url "
+                                             "url_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.url_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info_url "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    } else {
+                        auto delivery =
+                            atsc3::mmt_si_plt_delivery_info::decode(delivery_span);
+                        if (!delivery.ok) {
+                            std::cerr << "verify: TLV #" << idx
+                                      << " mmt_si_plt_delivery_info decode: "
+                                      << delivery.error << "\n";
+                            return 1;
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_location_type
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_location_type
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.location_type)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info "
+                                             "location_type want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value.location_type)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                        if (!o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                 .empty()) {
+                            const auto want =
+                                o.expect_mmt_si_plt_delivery_info_descriptor_loop_length
+                                    [idx];
+                            if (want != static_cast<std::uint32_t>(
+                                    delivery.value.descripor_loop_length)) {
+                                std::cerr << "verify: TLV #" << idx
+                                          << " mmt_si_plt_delivery_info "
+                                             "descripor_loop_length want "
+                                          << want << " got "
+                                          << static_cast<unsigned>(
+                                                 delivery.value
+                                                     .descripor_loop_length)
+                                          << "\n";
+                                return 1;
+                            }
+                        }
+                    }
+                }
+            }
+            if (o.strip_mmt_si_plt_table) {
+                work = work.subspan(pltd.bytes_consumed);
+            }
+        }
+
+        if (o.strip_mmtp_gfd_header) {
+            if (!peeled_mmtp_payload_type.has_value() ||
+                *peeled_mmtp_payload_type != 1u) {
+                std::cerr << "verify: TLV #" << idx
+                          << " --strip-mmtp-gfd-header requires MMTP payload_type 1 "
+                             "on stripped word-0\n";
+                return 1;
+            }
+            if (work.size() < k_mmtp_gfd_header_bytes) {
+                std::cerr << "verify: TLV #" << idx << " ALP opaque too short for "
+                             "MMTP GFD payload header\n";
+                return 1;
+            }
+            auto gfdd = atsc3::mmtp_payload_gfd_header::decode(
+                work.subspan(0, k_mmtp_gfd_header_bytes));
+            if (!gfdd.ok) {
+                std::cerr << "verify: TLV #" << idx
+                          << " MMTP GFD payload header decode: " << gfdd.error << "\n";
+                return 1;
+            }
+            const auto& gv = gfdd.value;
+            if (o.expect_mmtp_gfd_session_last.has_value() &&
+                *o.expect_mmtp_gfd_session_last != gv.session_last_packet_flag) {
+                std::cerr << "verify: TLV #" << idx
+                          << " MMTP GFD session_last_packet_flag mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_object_last_packet.has_value() &&
+                *o.expect_mmtp_gfd_object_last_packet !=
+                    gv.object_last_packet_flag) {
+                std::cerr << "verify: TLV #" << idx
+                          << " MMTP GFD object_last_packet_flag mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_object_last_byte.has_value() &&
+                *o.expect_mmtp_gfd_object_last_byte != gv.object_last_byte_flag) {
+                std::cerr << "verify: TLV #" << idx
+                          << " MMTP GFD object_last_byte_flag mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_code_point.has_value() &&
+                *o.expect_mmtp_gfd_code_point != gv.code_point) {
+                std::cerr << "verify: TLV #" << idx << " MMTP GFD code_point mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_reserved.has_value() &&
+                *o.expect_mmtp_gfd_reserved != gv.reserved) {
+                std::cerr << "verify: TLV #" << idx << " MMTP GFD reserved mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_toi.has_value() &&
+                *o.expect_mmtp_gfd_toi != gv.transport_object_identifier) {
+                std::cerr << "verify: TLV #" << idx
+                          << " MMTP GFD transport_object_identifier mismatch\n";
+                return 1;
+            }
+            if (o.expect_mmtp_gfd_start_offset.has_value() &&
+                *o.expect_mmtp_gfd_start_offset != gv.start_offset) {
+                std::cerr << "verify: TLV #" << idx << " MMTP GFD start_offset mismatch\n";
+                return 1;
+            }
+            work = work.subspan(k_mmtp_gfd_header_bytes);
+        }
+
         if (o.strip_mmtp_isobmff_prefix) {
             if (work.size() < k_mmtp_isobmff_prefix_bytes) {
                 std::cerr << "verify: TLV #" << idx << " ALP opaque too short for "
@@ -1397,11 +6499,21 @@ int do_verify(const opts &o) {
                         const std::uint16_t du_len =
                             read_be16(tail.subspan(du_peel, 2));
                         du_peel += 2;
-                        if (static_cast<std::size_t>(du_len) != want.size()) {
+                        std::size_t want_wire_octets = want.size();
+                        if (o.strip_mmtp_isobmff_du_header) {
+                            const std::size_t duh =
+                                iso.timed_flag ? k_isobmff_du_header_timed_octets
+                                               : k_isobmff_du_header_non_timed_octets;
+                            want_wire_octets = want.size() + duh;
+                        }
+                        if (static_cast<std::size_t>(du_len) != want_wire_octets) {
                             std::cerr << "verify: TLV #" << idx
                                       << " ISOBMFF DU_length " << du_len
-                                      << " != expected body " << want.size()
-                                      << "\n";
+                                      << " != expected "
+                                      << (o.strip_mmtp_isobmff_du_header
+                                              ? "media+DU_header octets "
+                                              : "body octets ")
+                                      << want_wire_octets << "\n";
                             return 1;
                         }
                         if (du_peel + du_len > tail_target) {
@@ -1410,12 +6522,20 @@ int do_verify(const opts &o) {
                             return 1;
                         }
                         const auto got = tail.subspan(du_peel, du_len);
-                        if (!std::equal(got.begin(), got.end(), want.begin())) {
+                        const auto sk = mmtp_isobmff_du_header_strip_octets(
+                            o.strip_mmtp_isobmff_du_header, iso.fragment_type,
+                            iso.timed_flag, got, idx, o);
+                        if (!sk) {
+                            return 1;
+                        }
+                        const auto cmp = got.subspan(*sk);
+                        if (cmp.size() != want.size() ||
+                            !std::equal(cmp.begin(), cmp.end(), want.begin())) {
                             std::cerr << "verify: TLV #" << idx
                                       << " ISOBMFF aggregate DU body mismatch want "
                                       << bytes_to_hex(std::span<const std::byte>(
                                              want.data(), want.size()))
-                                      << " got " << bytes_to_hex(got) << "\n";
+                                      << " got " << bytes_to_hex(cmp) << "\n";
                             return 1;
                         }
                         du_peel += du_len;
@@ -1436,6 +6556,15 @@ int do_verify(const opts &o) {
                                       << " ISOBMFF aggregate body overruns "
                                          "declared MMTP payload (no expect hex)\n";
                             return 1;
+                        }
+                        const auto got = tail.subspan(du_peel, du_len);
+                        if (o.strip_mmtp_isobmff_du_header) {
+                            const auto sk = mmtp_isobmff_du_header_strip_octets(
+                                true, iso.fragment_type, iso.timed_flag, got,
+                                idx, o);
+                            if (!sk) {
+                                return 1;
+                            }
                         }
                         du_peel += du_len;
                     }
@@ -1503,91 +6632,13 @@ int do_verify(const opts &o) {
                 return 1;
             }
             std::size_t non_agg_du_hdr_skip = 0;
-            if (o.strip_mmtp_isobmff_du_header) {
-                if (iso.aggregation_flag) {
-                    std::cerr << "verify: TLV #" << idx
-                              << " --strip-mmtp-isobmff-du-header is not supported "
-                                 "when ISOBMFF aggregation_flag=1\n";
+            if (o.strip_mmtp_isobmff_du_header && !iso.aggregation_flag) {
+                const auto sk = mmtp_isobmff_du_header_strip_octets(
+                    true, iso.fragment_type, iso.timed_flag, tail, idx, o);
+                if (!sk) {
                     return 1;
                 }
-                if (iso.fragment_type != 2u) {
-                    std::cerr << "verify: TLV #" << idx
-                              << " --strip-mmtp-isobmff-du-header requires "
-                                 "fragment_type=2 on wire\n";
-                    return 1;
-                }
-                const std::size_t duh_sz =
-                    iso.timed_flag ? k_isobmff_du_header_timed_octets
-                                   : k_isobmff_du_header_non_timed_octets;
-                if (tail.size() < duh_sz) {
-                    std::cerr << "verify: TLV #" << idx
-                              << " ALP opaque too short for ISOBMFF DU_header ("
-                              << duh_sz << " octets)\n";
-                    return 1;
-                }
-                if (iso.timed_flag) {
-                    auto dud = atsc3::mmtp_payload_isobmff_du_header_timed::decode(
-                        tail.subspan(0, duh_sz));
-                    if (!dud.ok || dud.bytes_consumed != duh_sz) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF timed DU_header decode: "
-                                  << (dud.ok ? "length mismatch" : dud.error)
-                                  << "\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_movie_fragment_sequence_number
-                            .has_value() &&
-                        *o.expect_mmtp_isobmff_du_movie_fragment_sequence_number !=
-                            dud.value.movie_fragment_sequence_number) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header mf_seq mismatch\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_sample_number.has_value() &&
-                        *o.expect_mmtp_isobmff_du_sample_number !=
-                            dud.value.sample_number) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header sample_number mismatch\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_offset.has_value() &&
-                        *o.expect_mmtp_isobmff_du_offset != dud.value.offset) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header offset mismatch\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_subsample_priority.has_value() &&
-                        *o.expect_mmtp_isobmff_du_subsample_priority !=
-                            dud.value.subsample_priority) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header subsample_priority mismatch\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_dependency_counter.has_value() &&
-                        *o.expect_mmtp_isobmff_du_dependency_counter !=
-                            dud.value.dependency_counter) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header dependency_counter mismatch\n";
-                        return 1;
-                    }
-                } else {
-                    auto dud = atsc3::mmtp_payload_isobmff_du_header_non_timed::decode(
-                        tail.subspan(0, duh_sz));
-                    if (!dud.ok || dud.bytes_consumed != duh_sz) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF non-timed DU_header decode: "
-                                  << (dud.ok ? "length mismatch" : dud.error)
-                                  << "\n";
-                        return 1;
-                    }
-                    if (o.expect_mmtp_isobmff_du_item_id.has_value() &&
-                        *o.expect_mmtp_isobmff_du_item_id != dud.value.item_id) {
-                        std::cerr << "verify: TLV #" << idx
-                                  << " ISOBMFF DU_header item_id mismatch\n";
-                        return 1;
-                    }
-                }
-                non_agg_du_hdr_skip = duh_sz;
+                non_agg_du_hdr_skip = *sk;
             }
             if (iso.aggregation_flag) {
                 work = work.subspan(k_mmtp_isobmff_prefix_bytes + du_peel);

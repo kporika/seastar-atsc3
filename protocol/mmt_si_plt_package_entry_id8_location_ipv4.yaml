@@ -1,0 +1,36 @@
+# MMT-SI — **Package List Table** package entry (**MMT_package_id_length** **1**, **location_type** **1** / IPv4).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::Unpack`**
+# after **num_of_packages**: **MMT_package_id_length**, **MMT_package_id** octets, then
+# **MMT_general_location_info** when **location_type** **==** **0x01** (**IPv4** flow). This YAML is
+# **id_length** **1** with **MMT_package_id** **0x01** and zero IPv4 addresses/port.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_package_entry_id8_location_ipv4
+  proto_id: 39
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT package entry lab; id_length 1, location_type 1)"
+  description: "one-byte package id + IPv4 general_location_info (13 B)"
+
+header:
+  total_bits: 104
+  fields:
+    - { name: MMT_package_id_length, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: MMT_package_id, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 16, bit_width: 8, type: uint }
+    - { name: ipv4_src_addr, bit_offset: 24, bit_width: 32, type: uint }
+    - { name: ipv4_dst_addr, bit_offset: 56, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 88, bit_width: 16, type: uint }
+
+fixtures:
+  - name: one_byte_id_ipv4_location
+    description: "package id 0x01, IPv4 location, zero addresses and port"
+    raw_hex: "01 01 01 00 00 00 00 00 00 00 00 00 00"
+    expected:
+      MMT_package_id_length: 1
+      MMT_package_id: 1
+      location_type: 1
+      ipv4_src_addr: 0
+      ipv4_dst_addr: 0
+      dst_port: 0

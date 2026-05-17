@@ -1,0 +1,40 @@
+# MMT-SI — **one table header row** (**table_id** + **table_version** + **table_length**) as a
+# **32-bit big-endian word** followed by no further bytes in this protocol (**length** applies to
+# the **table body** carried **outside** this record — same indexing pattern as **DumpTS**
+# `PAMessage` table header loop: **8** + **8** + **16** in MSB-first order).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** (**PA** message lists **MMT Package Table** and
+# other tables). This YAML is a **single header row** lab unit; concatenate table bodies separately
+# in higher layers or integration hex.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_table_header_word32
+  proto_id: 20
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PA table header row lab)"
+  description: "table_id + table_version + table_length BE16 (4 B)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: table_id, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: table_version, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: table_length, bit_offset: 16, bit_width: 16, type: uint }
+
+fixtures:
+  - name: mpt_row_len0
+    description: "MMT Package Table id 0x20, version 1, declared body length 0"
+    raw_hex: "20 01 00 00"
+    expected:
+      table_id: 32
+      table_version: 1
+      table_length: 0
+
+  - name: plt_row
+    description: "Package List Table id 0x80, version 0, length 10"
+    raw_hex: "80 00 00 0A"
+    expected:
+      table_id: 128
+      table_version: 0
+      table_length: 10

@@ -1,0 +1,32 @@
+# MMT-SI — **Package List Table** package entry IPv4 with non-zero addresses (**AAI** lab).
+#
+# Same wire layout as **`mmt_si_plt_package_entry_ipv4`**; fixture uses **src** **10.0.0.1**,
+# **dst** **224.0.0.1**, **dst_port** **5000**.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_package_entry_ipv4_nz
+  proto_id: 50
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT package entry lab; id_length 0, IPv4 non-zero addrs)"
+  description: "package_id_length 0 + IPv4 10.0.0.1:224.0.0.1:5000 (12 B)"
+
+header:
+  total_bits: 96
+  fields:
+    - { name: MMT_package_id_length, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: ipv4_src_addr, bit_offset: 16, bit_width: 32, type: uint }
+    - { name: ipv4_dst_addr, bit_offset: 48, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 80, bit_width: 16, type: uint }
+
+fixtures:
+  - name: lab_multicast_ipv4_package
+    description: "zero package id, IPv4 location 10.0.0.1 -> 224.0.0.1:5000"
+    raw_hex: "00 01 0a 00 00 01 e0 00 00 01 13 88"
+    expected:
+      MMT_package_id_length: 0
+      location_type: 1
+      ipv4_src_addr: 167772161
+      ipv4_dst_addr: 3758096385
+      dst_port: 5000

@@ -1,0 +1,50 @@
+# MMT-SI — **consumption message prefix** (**message_id** + **message_version** + **32-bit**
+# **message_byte_length**) + opaque message body.
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** defines **PA** / **MPI** / **MPT** (and other)
+# signalling messages. The common wire prefix parsed by reference tools (e.g. DumpTS `Message::Unpack`)
+# is **16-bit BE** **message_id**, **8-bit** **message_version**, then **either** **16-bit** or **32-bit**
+# **message_byte_length** depending on **message_id**. **PA** (**0x0000**), **MPI** (**0x0001**–**0x000F**),
+# and **MPT** (**0x0010**–**0x001F**) use the **32-bit** length form on this lab path (same as DumpTS
+# for ids other than **0x8000** / **0x8001** / **0x8002**).
+#
+# **message_byte_length** = number of octets **after** this **7-byte** prefix (the remainder of the
+# message, including nested tables/descriptors).
+#
+# Bit order: MSB-first within each octet (**bit_offset** **0** = MSB of byte **0**).
+
+protocol:
+  name: mmt_si_message_header_len32
+  proto_id: 19
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 consumption message lab; 32-bit length)"
+  description: "message_id BE16 + message_version + message_byte_length BE32 + body"
+
+header:
+  total_bits: 56
+  fields:
+    - { name: message_id, bit_offset: 0, bit_width: 16, type: uint }
+    - { name: message_version, bit_offset: 16, bit_width: 8, type: uint }
+    - { name: message_byte_length, bit_offset: 24, bit_width: 32, type: uint }
+
+payload:
+  length_field: message_byte_length
+  kind: opaque
+
+fixtures:
+  - name: pa_len2
+    description: "PA message_id=0, version=1, body 2 octets"
+    raw_hex: "00 00 01 00 00 00 02 DE AD"
+    expected:
+      message_id: 0
+      message_version: 1
+      message_byte_length: 2
+      payload_hex: "DEAD"
+
+  - name: mpi_empty_body
+    description: "MPI message_id=1, version=0, zero-length body"
+    raw_hex: "00 01 00 00 00 00 00"
+    expected:
+      message_id: 1
+      message_version: 0
+      message_byte_length: 0
+      payload_hex: ""

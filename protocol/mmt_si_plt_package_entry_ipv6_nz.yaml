@@ -1,0 +1,44 @@
+# MMT-SI — **Package List Table** package entry IPv6 with non-zero addresses (**AAJ** lab).
+#
+# Same wire layout as **`mmt_si_plt_package_entry_ipv6`**; fixture uses IPv4-mapped IPv6
+# **src** **::ffff:10.0.0.1**, **dst** **::ffff:224.0.0.1**, **dst_port** **5000**.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_package_entry_ipv6_nz
+  proto_id: 51
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT package entry lab; id_length 0, IPv6 non-zero addrs)"
+  description: "package_id_length 0 + IPv6 ::ffff:10.0.0.1:224.0.0.1:5000 (36 B)"
+
+header:
+  total_bits: 288
+  fields:
+    - { name: MMT_package_id_length, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: ipv6_src_addr_0, bit_offset: 16, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_1, bit_offset: 48, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_2, bit_offset: 80, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_3, bit_offset: 112, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_0, bit_offset: 144, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_1, bit_offset: 176, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_2, bit_offset: 208, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_3, bit_offset: 240, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 272, bit_width: 16, type: uint }
+
+fixtures:
+  - name: lab_mapped_ipv6_package
+    description: "zero package id, IPv6 location ::ffff:10.0.0.1 -> ::ffff:224.0.0.1:5000"
+    raw_hex: "00 02 00 00 00 00 00 00 00 00 00 00 ff ff 0a 00 00 01 00 00 00 00 00 00 00 00 00 00 ff ff e0 00 00 01 13 88"
+    expected:
+      MMT_package_id_length: 0
+      location_type: 2
+      ipv6_src_addr_0: 0
+      ipv6_src_addr_1: 0
+      ipv6_src_addr_2: 65535
+      ipv6_src_addr_3: 167772161
+      ipv6_dst_addr_0: 0
+      ipv6_dst_addr_1: 0
+      ipv6_dst_addr_2: 65535
+      ipv6_dst_addr_3: 3758096385
+      dst_port: 5000

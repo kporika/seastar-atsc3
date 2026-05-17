@@ -11,8 +11,16 @@
 # repeats per aggregated data unit (then **DU_Header** + body per unit).
 # **DU_Header** for **FT**=**2**:
 # **`mmtp_payload_isobmff_du_header_timed.yaml`** (**T**=**1**) or
-# **`mmtp_payload_isobmff_du_header_non_timed.yaml`** (**T**=**0**). **FT** 0–1
-# carry no DU header — opaque box data follows **sequence_number**.
+# **`mmtp_payload_isobmff_du_header_non_timed.yaml`** (**T**=**0**). **FT**=**0** (metadata)
+# and **FT**=**1** (media fragment / **MFU** in **ISO/IEC 23008-1** Figure 3 terminology)
+# carry no **DU_header** — opaque **MPU**/**MFU** data follows **sequence_number**.
+#
+# **FT**=**3**–**15** remain future YAML + **`gw`** / **`mmt_probe`** work; see **`docs/END_TO_END_GAPS.md`** **M8**.
+# **PA** / **MPI** / **MPT** are **MMT-SI** consumption messages (ISO/IEC 23008-1 **§10.3**), normally
+# carried under **MMTP payload_type** **0x02** (signalling) after **§9.3.4** — not under **payload_type** **0x00**
+# (ISOBMFF mode). Deployments often demux SI by **`packet_id`** (e.g. ARIB MMT broadcast texts use
+# **`packet_id`** **0** for the **PA** flow); **`scripts/mmtp_word0_integration_test.sh`** phases **V**–**X**
+# exercise **`mmtp_header_word0.packet_id`** **0**/**1**/**2** with the same **§9.3.4** prefix + user payload.
 
 protocol:
   name: mmtp_payload_isobmff_prefix
@@ -55,3 +63,15 @@ fixtures:
       aggregation_flag: false
       fragment_counter: 0
       sequence_number: 1
+
+  - name: mfu_media_fragment_ft1
+    description: "length=8, FT=1 (media fragment / MFU), T=0, f_i=00, A=0, frag=0, seq=0x11223344 → 00 08 10 00 11 22 33 44"
+    raw_hex: "00 08 10 00 11 22 33 44"
+    expected:
+      payload_length_excluding_length_field: 8
+      fragment_type: 1
+      timed_flag: false
+      fragmentation_indicator: 0
+      aggregation_flag: false
+      fragment_counter: 0
+      sequence_number: 287454020

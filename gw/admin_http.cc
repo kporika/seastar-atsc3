@@ -59,6 +59,8 @@ struct GwHttpAdminConfigSnap {
     std::uint32_t lct_tsi = 0;
     bool lct_include_toi = false;
     std::uint32_t lct_toi = 0;
+    bool alp_payload_config = false;
+    bool alp_header_mode = false;
     bool prepend_mmtp_word0 = false;
     std::uint8_t mmtp_payload_type = 0;
     std::uint16_t mmtp_packet_id = 0;
@@ -76,6 +78,13 @@ struct GwHttpAdminConfigSnap {
     bool mmtp_signalling_aggregation = false;
     std::uint8_t mmtp_signalling_fragment_counter = 0;
     std::vector<std::vector<std::byte>> mmtp_signalling_aggregate_bodies{};
+    bool prepend_mmt_si_length32_envelope = false;
+    bool prepend_mmt_si_descriptor_loop_u32 = false;
+    bool prepend_mmt_si_message_header_len32 = false;
+    std::uint16_t mmt_si_message_id = 0;
+    std::uint8_t mmt_si_message_version = 0;
+    bool prepend_mmt_si_pa_table_headers = false;
+    std::size_t mmt_si_pa_table_header_row_count = 0;
     bool prepend_mmtp_isobmff_prefix = false;
     std::uint8_t mmtp_isobmff_fragment_type = 0;
     bool mmtp_isobmff_timed = false;
@@ -91,6 +100,14 @@ struct GwHttpAdminConfigSnap {
     std::uint32_t mmtp_isobmff_du_offset = 0;
     std::uint8_t mmtp_isobmff_du_subsample_priority = 0;
     std::uint8_t mmtp_isobmff_du_dependency_counter = 0;
+    bool prepend_mmtp_gfd_header = false;
+    bool mmtp_gfd_session_last = false;
+    bool mmtp_gfd_object_last_packet = false;
+    bool mmtp_gfd_object_last_byte = false;
+    std::uint8_t mmtp_gfd_code_point = 0;
+    std::uint8_t mmtp_gfd_reserved = 0;
+    std::uint32_t mmtp_gfd_toi = 0;
+    std::uint64_t mmtp_gfd_start_offset = 0;
 };
 
 inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
@@ -104,6 +121,8 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
     o.lct_tsi               = s.encoder_lct_tsi();
     o.lct_include_toi       = s.encoder_lct_includes_toi();
     o.lct_toi               = s.encoder_lct_toi();
+    o.alp_payload_config    = s.encoder_alp_payload_config();
+    o.alp_header_mode       = s.encoder_alp_header_mode();
     o.prepend_mmtp_word0    = s.encoder_prepends_mmtp_word0();
     o.mmtp_payload_type     = s.encoder_mmtp_payload_type();
     o.mmtp_packet_id        = s.encoder_mmtp_packet_id();
@@ -125,6 +144,17 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
         s.encoder_mmtp_signalling_fragment_counter();
     o.mmtp_signalling_aggregate_bodies =
         s.encoder_mmtp_signalling_aggregate_bodies();
+    o.prepend_mmt_si_length32_envelope =
+        s.encoder_prepends_mmt_si_length32_envelope();
+    o.prepend_mmt_si_descriptor_loop_u32 =
+        s.encoder_prepends_mmt_si_descriptor_loop_u32();
+    o.prepend_mmt_si_message_header_len32 =
+        s.encoder_prepends_mmt_si_message_header_len32();
+    o.mmt_si_message_id     = s.encoder_mmt_si_message_id();
+    o.mmt_si_message_version = s.encoder_mmt_si_message_version();
+    o.prepend_mmt_si_pa_table_headers = s.encoder_prepends_mmt_si_pa_table_headers();
+    o.mmt_si_pa_table_header_row_count =
+        s.encoder_mmt_si_pa_table_header_row_count();
     o.prepend_mmtp_isobmff_prefix = s.encoder_prepends_mmtp_isobmff_prefix();
     o.mmtp_isobmff_fragment_type =
         s.encoder_mmtp_isobmff_fragment_type();
@@ -148,6 +178,15 @@ inline GwHttpAdminConfigSnap gw_http_take_admin_config(const gw_server& s) {
         s.encoder_mmtp_isobmff_du_subsample_priority();
     o.mmtp_isobmff_du_dependency_counter =
         s.encoder_mmtp_isobmff_du_dependency_counter();
+    o.prepend_mmtp_gfd_header = s.encoder_prepends_mmtp_gfd_header();
+    o.mmtp_gfd_session_last = s.encoder_mmtp_gfd_session_last_packet_flag();
+    o.mmtp_gfd_object_last_packet =
+        s.encoder_mmtp_gfd_object_last_packet_flag();
+    o.mmtp_gfd_object_last_byte = s.encoder_mmtp_gfd_object_last_byte_flag();
+    o.mmtp_gfd_code_point         = s.encoder_mmtp_gfd_code_point();
+    o.mmtp_gfd_reserved           = s.encoder_mmtp_gfd_reserved();
+    o.mmtp_gfd_toi                = s.encoder_mmtp_gfd_transport_object_identifier();
+    o.mmtp_gfd_start_offset       = s.encoder_mmtp_gfd_start_offset();
     return o;
 }
 
@@ -466,6 +505,10 @@ public:
         w.Bool(snap.lct_include_toi);
         w.Key("lct_toi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
+        w.Key("alp_payload_config");
+        w.Bool(snap.alp_payload_config);
+        w.Key("alp_header_mode");
+        w.Bool(snap.alp_header_mode);
         w.Key("prepend_mmtp_word0");
         w.Bool(snap.prepend_mmtp_word0);
         w.Key("mmtp_payload_type");
@@ -533,6 +576,20 @@ public:
             w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
         }
         w.EndArray();
+        w.Key("prepend_mmt_si_length32_envelope");
+        w.Bool(snap.prepend_mmt_si_length32_envelope);
+        w.Key("prepend_mmt_si_descriptor_loop_u32");
+        w.Bool(snap.prepend_mmt_si_descriptor_loop_u32);
+        w.Key("prepend_mmt_si_message_header_len32");
+        w.Bool(snap.prepend_mmt_si_message_header_len32);
+        w.Key("mmt_si_message_id");
+        w.Uint(static_cast<unsigned>(snap.mmt_si_message_id));
+        w.Key("mmt_si_message_version");
+        w.Uint(static_cast<unsigned>(snap.mmt_si_message_version));
+        w.Key("prepend_mmt_si_pa_table_headers");
+        w.Bool(snap.prepend_mmt_si_pa_table_headers);
+        w.Key("mmt_si_pa_table_header_row_count");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmt_si_pa_table_header_row_count));
         w.Key("prepend_mmtp_isobmff_prefix");
         w.Bool(snap.prepend_mmtp_isobmff_prefix);
         w.Key("mmtp_isobmff_fragment_type");
@@ -568,6 +625,22 @@ public:
             w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
         }
         w.EndArray();
+        w.Key("prepend_mmtp_gfd_header");
+        w.Bool(snap.prepend_mmtp_gfd_header);
+        w.Key("mmtp_gfd_session_last");
+        w.Bool(snap.mmtp_gfd_session_last);
+        w.Key("mmtp_gfd_object_last_packet");
+        w.Bool(snap.mmtp_gfd_object_last_packet);
+        w.Key("mmtp_gfd_object_last_byte");
+        w.Bool(snap.mmtp_gfd_object_last_byte);
+        w.Key("mmtp_gfd_code_point");
+        w.Uint(static_cast<unsigned>(snap.mmtp_gfd_code_point));
+        w.Key("mmtp_gfd_reserved");
+        w.Uint(static_cast<unsigned>(snap.mmtp_gfd_reserved));
+        w.Key("mmtp_gfd_toi");
+        w.Uint(snap.mmtp_gfd_toi);
+        w.Key("mmtp_gfd_start_offset");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_gfd_start_offset));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");
@@ -716,6 +789,10 @@ public:
         w.Bool(snap.lct_include_toi);
         w.Key("lct_toi");
         w.Uint64(static_cast<std::uint64_t>(snap.lct_toi));
+        w.Key("alp_payload_config");
+        w.Bool(snap.alp_payload_config);
+        w.Key("alp_header_mode");
+        w.Bool(snap.alp_header_mode);
         w.Key("prepend_mmtp_word0");
         w.Bool(snap.prepend_mmtp_word0);
         w.Key("mmtp_payload_type");
@@ -783,6 +860,20 @@ public:
             w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
         }
         w.EndArray();
+        w.Key("prepend_mmt_si_length32_envelope");
+        w.Bool(snap.prepend_mmt_si_length32_envelope);
+        w.Key("prepend_mmt_si_descriptor_loop_u32");
+        w.Bool(snap.prepend_mmt_si_descriptor_loop_u32);
+        w.Key("prepend_mmt_si_message_header_len32");
+        w.Bool(snap.prepend_mmt_si_message_header_len32);
+        w.Key("mmt_si_message_id");
+        w.Uint(static_cast<unsigned>(snap.mmt_si_message_id));
+        w.Key("mmt_si_message_version");
+        w.Uint(static_cast<unsigned>(snap.mmt_si_message_version));
+        w.Key("prepend_mmt_si_pa_table_headers");
+        w.Bool(snap.prepend_mmt_si_pa_table_headers);
+        w.Key("mmt_si_pa_table_header_row_count");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmt_si_pa_table_header_row_count));
         w.Key("prepend_mmtp_isobmff_prefix");
         w.Bool(snap.prepend_mmtp_isobmff_prefix);
         w.Key("mmtp_isobmff_fragment_type");
@@ -818,6 +909,22 @@ public:
             w.String(hx.c_str(), static_cast<rapidjson::SizeType>(hx.size()));
         }
         w.EndArray();
+        w.Key("prepend_mmtp_gfd_header");
+        w.Bool(snap.prepend_mmtp_gfd_header);
+        w.Key("mmtp_gfd_session_last");
+        w.Bool(snap.mmtp_gfd_session_last);
+        w.Key("mmtp_gfd_object_last_packet");
+        w.Bool(snap.mmtp_gfd_object_last_packet);
+        w.Key("mmtp_gfd_object_last_byte");
+        w.Bool(snap.mmtp_gfd_object_last_byte);
+        w.Key("mmtp_gfd_code_point");
+        w.Uint(static_cast<unsigned>(snap.mmtp_gfd_code_point));
+        w.Key("mmtp_gfd_reserved");
+        w.Uint(static_cast<unsigned>(snap.mmtp_gfd_reserved));
+        w.Key("mmtp_gfd_toi");
+        w.Uint(snap.mmtp_gfd_toi);
+        w.Key("mmtp_gfd_start_offset");
+        w.Uint64(static_cast<std::uint64_t>(snap.mmtp_gfd_start_offset));
         w.Key("admin");
         w.StartObject();
         w.Key("operator_schema_version");

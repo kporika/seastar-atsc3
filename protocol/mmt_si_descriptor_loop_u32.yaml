@@ -1,0 +1,69 @@
+# MMT-SI — **descriptor loop with 32-bit region length** (lab framing for **§10.3** table octets).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** defines **PA** / **MPI** / **MPT** (and other)
+# consumption messages built from **tables** and descriptors. **ATSC A/331 Annex A.5** documents an
+# **`mmtp_desc`**-shaped **8**/**8** tag/length descriptor; many table bodies are a **length-prefixed**
+# concatenation of such descriptors. This YAML is the **same element wire as** **`mmtp_desc_loop`**
+# (**`protocol/mmtp_desc_loop.yaml`**) but with **`loop_length` carried in 32 bits BE** so large SI
+# regions fit the same pattern without a second 16-bit wrap. **Validate** against your **23008-1**
+# edition for the exact table and loop rules used on air in your deployment.
+#
+# Wire format (big-endian, no padding):
+#   +------------------+-----------------------------------------+
+#   | loop_length 32   |  loop_length bytes of mmtp_desc records |
+#   +------------------+-----------------------------------------+
+#
+# Bit order: MSB-first within each octet (**bit_offset** **0** = MSB of byte **0**).
+
+protocol:
+  name: mmt_si_descriptor_loop_u32
+  proto_id: 18
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 table-region lab; A/331 Annex A.5 descriptor shape)"
+  description: "BE32 loop_length + concatenated mmtp_desc (8-bit tag/len TLVs)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: loop_length, bit_offset: 0, bit_width: 32, type: uint }
+
+repeated:
+  length_field: loop_length
+  element: mmtp_desc
+
+fixtures:
+  - name: empty_loop
+    description: "Zero descriptors"
+    raw_hex: "00 00 00 00"
+    expected:
+      loop_length: 0
+      elements: []
+
+  - name: single_small_desc
+    description: "One descriptor (tag=0x10, 4-byte payload). loop_length = 6."
+    raw_hex: "00 00 00 06 10 04 DE AD BE EF"
+    expected:
+      loop_length: 6
+      elements:
+        - descriptor_tag: 16
+          descriptor_length: 4
+          payload_hex: "DEADBEEF"
+
+  - name: three_descs_mixed
+    description: "Three descriptors; loop_length = 18"
+    raw_hex: >
+      00 00 00 12
+      05 00
+      10 04 DE AD BE EF
+      FF 08 00 11 22 33 44 55 66 77
+    expected:
+      loop_length: 18
+      elements:
+        - descriptor_tag: 5
+          descriptor_length: 0
+          payload_hex: ""
+        - descriptor_tag: 16
+          descriptor_length: 4
+          payload_hex: "DEADBEEF"
+        - descriptor_tag: 255
+          descriptor_length: 8
+          payload_hex: "0011223344556677"

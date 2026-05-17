@@ -1,0 +1,35 @@
+# MMT-SI — **Package List Table** **DeliveryInfo** record (**location_type** **1** / IPv4 lab slice).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::DeliveryInfo`**
+# when **location_type** **==** **0x01** (**MMTP** packet of **IPv4** data flow). **descripor_loop_length**
+# **0** on this minimal path (no trailing descriptor octets).
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_delivery_info_ipv4
+  proto_id: 28
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT DeliveryInfo IPv4 lab; location_type 1)"
+  description: "transport_file_id + location_type 1 + IPv4 addrs + dst_port + desc len (17 B)"
+
+header:
+  total_bits: 136
+  fields:
+    - { name: transport_file_id, bit_offset: 0, bit_width: 32, type: uint }
+    - { name: location_type, bit_offset: 32, bit_width: 8, type: uint }
+    - { name: ipv4_src_addr, bit_offset: 40, bit_width: 32, type: uint }
+    - { name: ipv4_dst_addr, bit_offset: 72, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 104, bit_width: 16, type: uint }
+    - { name: descripor_loop_length, bit_offset: 120, bit_width: 16, type: uint }
+
+fixtures:
+  - name: minimal_ipv4_zero_addrs
+    description: "IPv4 flow, zero addresses and port, zero descriptor loop"
+    raw_hex: "00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00"
+    expected:
+      transport_file_id: 0
+      location_type: 1
+      ipv4_src_addr: 0
+      ipv4_dst_addr: 0
+      dst_port: 0
+      descripor_loop_length: 0

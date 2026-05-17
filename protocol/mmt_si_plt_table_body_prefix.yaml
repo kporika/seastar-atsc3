@@ -1,0 +1,28 @@
+# MMT-SI — **Package List Table** fixed body prefix (inside **`mmt_si_plt_table`** **`table_length`** region).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::Unpack`**
+# after **`Table::Unpack`**: **num_of_packages**, then package entries, then **num_of_ip_delivery**
+# and **DeliveryInfo** records. This YAML is the **2-byte minimal prefix** lab unit (zero packages,
+# zero IP deliveries).
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_table_body_prefix
+  proto_id: 25
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT table body prefix lab)"
+  description: "num_of_packages + num_of_ip_delivery (2 B)"
+
+header:
+  total_bits: 16
+  fields:
+    - { name: num_of_packages, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: num_of_ip_delivery, bit_offset: 8, bit_width: 8, type: uint }
+
+fixtures:
+  - name: minimal_empty
+    description: "zero packages, zero IP delivery records"
+    raw_hex: "00 00"
+    expected:
+      num_of_packages: 0
+      num_of_ip_delivery: 0

@@ -1,0 +1,31 @@
+# MMT-SI — **Package List Table** **DeliveryInfo** record (**location_type** **5** / URL lab slice).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::DeliveryInfo`**
+# when **location_type** **==** **0x05** (**URL**). **url_length** **0** on this minimal path (no
+# **URL_bytes** octets before **descripor_loop_length**). Non-zero **url_length** is future YAML.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_delivery_info_url
+  proto_id: 30
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT DeliveryInfo URL lab; url_length 0)"
+  description: "transport_file_id + location_type 5 + url_length + desc len (8 B)"
+
+header:
+  total_bits: 64
+  fields:
+    - { name: transport_file_id, bit_offset: 0, bit_width: 32, type: uint }
+    - { name: location_type, bit_offset: 32, bit_width: 8, type: uint }
+    - { name: url_length, bit_offset: 40, bit_width: 8, type: uint }
+    - { name: descripor_loop_length, bit_offset: 48, bit_width: 16, type: uint }
+
+fixtures:
+  - name: minimal_empty_url
+    description: "URL location, zero url octets, zero descriptor loop"
+    raw_hex: "00 00 00 00 05 00 00 00"
+    expected:
+      transport_file_id: 0
+      location_type: 5
+      url_length: 0
+      descripor_loop_length: 0

@@ -1,0 +1,39 @@
+# MMT-SI — **MMT Package Table** (**table_id** **0x20**) wire (DumpTS **`MMTPackageTable`** / **ISO/IEC 23008-1** **§10.3**).
+#
+# **Table envelope** (first **4** B, same as **`mmt_si_table_header_word32`** / **`Table::Unpack`**):
+# **table_id**, **table_version**, **table_length** (**BE16** = octets **after** this **4**-byte prefix).
+#
+# **MPT prefix** (first **table_length** octets of the table body region):
+# **reserved** (**6**) + **MPT_mode** (**2**), **MMT_package_id_length**, **MPT_descriptors_length** (**BE16**),
+# **number_of_assets**, then **MMT_package_id** bytes, descriptor bytes, and **Asset** records.
+# This YAML models the **fixed table envelope** + **opaque** **`table_length`** region. Inner
+# layout is parsed by **`mmt_si_mpt_table_body_prefix`** (**ZI** lab) and future **Asset** YAML.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_mpt_table
+  proto_id: 22
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 MMT Package Table lab)"
+  description: "table_id + version + BE16 length + length-byte MPT body region"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: table_id, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: table_version, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: table_length, bit_offset: 16, bit_width: 16, type: uint }
+
+payload:
+  length_field: table_length
+  kind: opaque
+
+fixtures:
+  - name: minimal_empty
+    description: "MPT id 0x20 v1, length 5, no package id, no descriptors, zero assets"
+    raw_hex: "20 01 00 05 00 00 00 00 00"
+    expected:
+      table_id: 32
+      table_version: 1
+      table_length: 5
+      payload_hex: "0000000000"

@@ -8,12 +8,56 @@
 #include "alp_decoder.h"
 #include "alp_encoder.h"
 #include "lct_rfc5651_word0_encoder.h"
+#include "mmt_si_length32_envelope_encoder.h"
+#include "mmt_si_message_header_len32_encoder.h"
+#include "mmt_si_mpt_asset_decoder.h"
+#include "mmt_si_mpt_asset_descriptors4_decoder.h"
+#include "mmt_si_mpt_asset_id8_decoder.h"
+#include "mmt_si_mpt_asset_id16_decoder.h"
+#include "mmt_si_mpt_asset_location0_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id8_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv4_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv4_nz_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv6_decoder.h"
+#include "mmt_si_mpt_asset_id16_location_ipv6_nz_decoder.h"
+#include "mmt_si_mpt_asset_id16_descriptors4_decoder.h"
+#include "mmt_si_mpt_asset_id8_descriptors4_decoder.h"
+#include "mmt_si_mpt_table_body_prefix_decoder.h"
+#include "mmt_si_mpt_table_decoder.h"
+#include "mmt_si_pa_table_headers_encoder.h"
+#include "mmt_si_plt_delivery_info_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv4_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv4_nz_decoder.h"
+#include "mmt_si_plt_delivery_info_ipv6_decoder.h"
+#include "mmt_si_plt_delivery_info_url_decoder.h"
+#include "mmt_si_plt_delivery_info_url_3_decoder.h"
+#include "mmt_si_plt_delivery_info_url_4_decoder.h"
+#include "mmt_si_plt_package_entry_decoder.h"
+#include "mmt_si_plt_package_entry_id8_decoder.h"
+#include "mmt_si_plt_package_entry_ipv4_decoder.h"
+#include "mmt_si_plt_package_entry_ipv4_nz_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv4_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv4_nz_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv6_decoder.h"
+#include "mmt_si_plt_package_entry_id8_location_ipv6_nz_decoder.h"
+#include "mmt_si_plt_package_entry_ipv6_decoder.h"
+#include "mmt_si_plt_package_entry_ipv6_nz_decoder.h"
+#include "mmt_si_plt_table_body_prefix_decoder.h"
+#include "mmt_si_plt_table_decoder.h"
 #include "mmtp_header_counter32_encoder.h"
 #include "mmtp_header_extension_encoder.h"
 #include "mmtp_header_ts_psn_encoder.h"
 #include "mmtp_header_word0_encoder.h"
 #include "mmtp_payload_isobmff_du_header_non_timed_encoder.h"
 #include "mmtp_payload_isobmff_du_header_timed_encoder.h"
+#include "mmtp_payload_gfd_header_encoder.h"
 #include "mmtp_payload_isobmff_prefix_encoder.h"
 #include "mmtp_payload_signalling_prefix_encoder.h"
 #include "tlv_mux_decoder.h"
@@ -34,6 +78,7 @@ constexpr std::size_t k_mmtp_signalling_prefix_octets = 2;  // §9.3.4 first 16 
 constexpr std::size_t k_mmtp_isobmff_prefix_octets   = 8;  // Figure 3 first 64 bits
 constexpr std::size_t k_isobmff_du_header_timed_octets   = 14;  // Figure 4
 constexpr std::size_t k_isobmff_du_header_non_timed_octets = 4;   // Figure 5
+constexpr std::size_t k_mmtp_gfd_header_octets = 12;  // Figure 6 (96 bits)
 
 inline void append_u16_be(std::vector<std::byte>* out, std::uint16_t x) noexcept {
     out->push_back(static_cast<std::byte>((x >> 8) & 0xFF));
@@ -48,7 +93,7 @@ inline void append_u32_be(std::vector<std::byte>* out, std::uint32_t x) noexcept
 }
 
 /// Octets the LCT lab appends after MMTP (word‑0 + optional extensions + optional
-/// ISOBMFF/signalling) and before TCP ingress. **`std::nullopt`** if the LCT lab
+/// ISOBMFF/GFD/signalling) and before TCP ingress. **`std::nullopt`** if the LCT lab
 /// mode in **`cfg`** is unsupported (same rules as **`encode`**’s LCT branch).
 [[nodiscard]] std::optional<std::size_t> lab_lct_trailing_octets(
     bool want_lct, const encoder_pipeline::config& cfg) noexcept {
@@ -114,10 +159,28 @@ encoder_pipeline::result encoder_pipeline::encode(
             "prepend_mmtp_header_word0";
         return r;
     }
+    if (!want_mmtp && _cfg.prepend_mmtp_gfd_header) {
+        r.error =
+            "encoder_pipeline: prepend_mmtp_gfd_header requires "
+            "prepend_mmtp_header_word0";
+        return r;
+    }
     if (_cfg.prepend_mmtp_isobmff_prefix && _cfg.prepend_mmtp_signalling_prefix) {
         r.error =
             "encoder_pipeline: prepend_mmtp_isobmff_prefix and "
             "prepend_mmtp_signalling_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.prepend_mmtp_gfd_header && _cfg.prepend_mmtp_signalling_prefix) {
+        r.error =
+            "encoder_pipeline: prepend_mmtp_gfd_header and "
+            "prepend_mmtp_signalling_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.prepend_mmtp_gfd_header && _cfg.prepend_mmtp_isobmff_prefix) {
+        r.error =
+            "encoder_pipeline: prepend_mmtp_gfd_header and "
+            "prepend_mmtp_isobmff_prefix are mutually exclusive";
         return r;
     }
     if (_cfg.prepend_mmtp_isobmff_prefix &&
@@ -125,6 +188,17 @@ encoder_pipeline::result encoder_pipeline::encode(
         r.error =
             "encoder_pipeline: prepend_mmtp_isobmff_prefix requires MMTP "
             "payload_type 0 (ISOBMFF mode)";
+        return r;
+    }
+    if (_cfg.prepend_mmtp_gfd_header && _cfg.mmtp_word0.payload_type != 1u) {
+        r.error =
+            "encoder_pipeline: prepend_mmtp_gfd_header requires MMTP "
+            "payload_type 1 (GFD mode)";
+        return r;
+    }
+    if (_cfg.prepend_mmtp_gfd_header && _cfg.mmtp_gfd_header.reserved > 31u) {
+        r.error =
+            "encoder_pipeline: mmtp_gfd_header.reserved must be <= 31 (5 bits)";
         return r;
     }
     if (_cfg.prepend_mmtp_isobmff_du_header &&
@@ -147,10 +221,6038 @@ encoder_pipeline::result encoder_pipeline::encode(
             "prepend_mmtp_ts_psn (ISO/IEC 23008-1 header order)";
         return r;
     }
+    if (_cfg.prepend_mmt_si_length32_envelope ||
+        _cfg.prepend_mmt_si_descriptor_loop_u32 ||
+        _cfg.prepend_mmt_si_message_header_len32 ||
+        _cfg.prepend_mmt_si_pa_table_headers) {
+        if (!_cfg.prepend_mmtp_signalling_prefix) {
+            r.error =
+                "encoder_pipeline: MMT-SI lab suffix (message header and/or "
+                "descriptor loop and/or length32 envelope) requires "
+                "prepend_mmtp_signalling_prefix";
+            return r;
+        }
+        if (!_cfg.prepend_mmtp_header_word0) {
+            r.error =
+                "encoder_pipeline: MMT-SI lab suffix requires prepend_mmtp_header_word0";
+            return r;
+        }
+        if (_cfg.mmtp_word0.payload_type != 2u) {
+            r.error =
+                "encoder_pipeline: MMT-SI lab suffix requires MMTP payload_type 2 "
+                "(signalling)";
+            return r;
+        }
+        if (_cfg.mmtp_signalling_prefix.aggregation_flag) {
+            r.error =
+                "encoder_pipeline: MMT-SI lab suffix requires signalling "
+                "aggregation_flag 0 (ISO/IEC 23008-1 9.3.4 lab)";
+            return r;
+        }
+        if (!_cfg.mmtp_signalling_aggregate_bodies.empty()) {
+            r.error =
+                "encoder_pipeline: MMT-SI lab suffix is incompatible with "
+                "non-empty mmtp_signalling_aggregate_bodies";
+            return r;
+        }
+    }
+
+    if (_cfg.validate_mmt_si_mpt_table_body &&
+        _cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_table_body and "
+            "validate_mmt_si_plt_table_body are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_table_body) {
+        auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+        if (!mpt.ok) {
+            r.error = "encoder_pipeline: mmt_si_mpt_table decode failed: " +
+                      mpt.error;
+            return r;
+        }
+        if (mpt.bytes_consumed != payload.size()) {
+            r.error =
+                "encoder_pipeline: mmt_si_mpt_table decode consumed " +
+                std::to_string(mpt.bytes_consumed) + " of " +
+                std::to_string(payload.size()) + " ingress octets";
+            return r;
+        }
+        if (mpt.value.table_id != 32u) {
+            r.error =
+                "encoder_pipeline: mmt_si_mpt_table table_id must be 0x20 (32)";
+            return r;
+        }
+        if (_cfg.validate_mmt_si_mpt_table_body_prefix) {
+            if (mpt.value.table_length != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix lab requires "
+                    "table_length 5 (minimal MPT prefix)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.bytes_consumed != mpt.value.payload.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix consumed " +
+                    std::to_string(pref.bytes_consumed) + " of " +
+                    std::to_string(mpt.value.payload.size()) +
+                    " MPT table_length octets";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset) {
+            if (mpt.value.table_length != 19u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset lab requires "
+                    "table_length 19 (5-byte prefix + 14-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset = atsc3::mmt_si_mpt_asset::decode(asset_span);
+            if (!asset.ok) {
+                r.error = "encoder_pipeline: mmt_si_mpt_asset decode failed: " +
+                          asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8) {
+            if (mpt.value.table_length != 20u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "table_length 20 (5-byte prefix + 15-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset = atsc3::mmt_si_mpt_asset_id8::decode(asset_span);
+            if (!asset.ok) {
+                r.error = "encoder_pipeline: mmt_si_mpt_asset_id8 decode failed: " +
+                          asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16) {
+            if (mpt.value.table_length != 21u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "table_length 21 (5-byte prefix + 16-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset = atsc3::mmt_si_mpt_asset_id16::decode(asset_span);
+            if (!asset.ok) {
+                r.error = "encoder_pipeline: mmt_si_mpt_asset_id16 decode failed: " +
+                          asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 0x01u ||
+                asset.value.asset_id_byte1 != 0x02u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "asset_id octets 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_location0) {
+            if (mpt.value.table_length != 22u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "table_length 22 (5-byte prefix + 17-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_location0";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_location0::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "location_type 0";
+                return r;
+            }
+            if (asset.value.packet_id != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "packet_id 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location0 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+            if (mpt.value.table_length != 30u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "table_length 30 (5-byte prefix + 25-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_location_ipv4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_location_ipv4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "ipv4_src_addr 0";
+                return r;
+            }
+            if (asset.value.ipv4_dst_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "ipv4_dst_addr 0";
+                return r;
+            }
+            if (asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            if (mpt.value.table_length != 30u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "table_length 30 (5-byte prefix + 25-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_location_ipv4_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_location_ipv4_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv4_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            if (mpt.value.table_length != 31u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "table_length 31 (5-byte prefix + 26-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8_location_ipv4_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id8_location_ipv4_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            if (mpt.value.table_length != 55u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "table_length 55 (5-byte prefix + 50-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8_location_ipv6_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id8_location_ipv6_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u ||
+                asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 65535u ||
+                asset.value.ipv6_src_addr_3 != 167772161u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "ipv6_src_addr ::ffff:10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv6_dst_addr_0 != 0u ||
+                asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 65535u ||
+                asset.value.ipv6_dst_addr_3 != 3758096385u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "ipv6_dst_addr ::ffff:224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            if (mpt.value.table_length != 32u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "table_length 32 (5-byte prefix + 27-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16_location_ipv4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id16_location_ipv4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "asset_id 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 1u || asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "location_count 1 and location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0u || asset.value.ipv4_dst_addr != 0u ||
+                asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "zero IPv4 addresses and dst_port";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            if (mpt.value.table_length != 32u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "table_length 32 (5-byte prefix + 27-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16_location_ipv4_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id16_location_ipv4_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "asset_id 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 1u || asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "location_count 1 and location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv4_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            if (mpt.value.table_length != 55u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "table_length 55 (5-byte prefix + 50-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16_location_ipv6";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            std::vector<std::byte> asset_buf(asset_span.begin(), asset_span.end());
+            if (asset_buf.size() == 50u) {
+                asset_buf.push_back(std::byte{0});
+            }
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id16_location_ipv6::decode(asset_buf);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_buf.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_buf.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "asset_id 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 1u || asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "location_count 1 and location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 0u || asset.value.ipv6_src_addr_3 != 0u ||
+                asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 0u || asset.value.ipv6_dst_addr_3 != 0u ||
+                asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "zero IPv6 addresses and dst_port";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            if (mpt.value.table_length != 56u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "table_length 56 (5-byte prefix + 51-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16_location_ipv6_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id16_location_ipv6_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "asset_id 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 1u || asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "location_count 1 and location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u ||
+                asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 65535u ||
+                asset.value.ipv6_src_addr_3 != 167772161u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "ipv6_src_addr ::ffff:10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv6_dst_addr_0 != 0u ||
+                asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 65535u ||
+                asset.value.ipv6_dst_addr_3 != 3758096385u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "ipv6_dst_addr ::ffff:224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_location_ipv6_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+            if (mpt.value.table_length != 25u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "table_length 25 (5-byte prefix + 20-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id16_descriptors4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id16_descriptors4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "asset_id_length 2";
+                return r;
+            }
+            if (asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "asset_id 0x01 0x02";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 4u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "asset_descriptors_length 4";
+                return r;
+            }
+            if (asset.value.descriptor_byte0 != 0xDEu ||
+                asset.value.descriptor_byte1 != 0xADu ||
+                asset.value.descriptor_byte2 != 0xBEu ||
+                asset.value.descriptor_byte3 != 0xEFu) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id16_descriptors4 lab requires "
+                    "descriptor octets DE AD BE EF";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+            if (mpt.value.table_length != 24u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "table_length 24 (5-byte prefix + 19-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8_descriptors4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id8_descriptors4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 4u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "asset_descriptors_length 4";
+                return r;
+            }
+            if (asset.value.descriptor_byte0 != 0xDEu ||
+                asset.value.descriptor_byte1 != 0xADu ||
+                asset.value.descriptor_byte2 != 0xBEu ||
+                asset.value.descriptor_byte3 != 0xEFu) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_descriptors4 lab requires "
+                    "descriptor octets DE AD BE EF";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+            if (mpt.value.table_length != 54u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "table_length 54 (5-byte prefix + 49-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_location_ipv6";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_location_ipv6::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u ||
+                asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 0u ||
+                asset.value.ipv6_src_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "zero ipv6_src_addr words";
+                return r;
+            }
+            if (asset.value.ipv6_dst_addr_0 != 0u ||
+                asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 0u ||
+                asset.value.ipv6_dst_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "zero ipv6_dst_addr words";
+                return r;
+            }
+            if (asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            if (mpt.value.table_length != 54u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "table_length 54 (5-byte prefix + 49-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_location_ipv6_nz";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_location_ipv6_nz::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u ||
+                asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+                asset.value.ipv6_src_addr_3 != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "ipv6_src_addr ::ffff:10.0.0.1";
+                return r;
+            }
+            if (asset.value.ipv6_dst_addr_0 != 0u ||
+                asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+                asset.value.ipv6_dst_addr_3 != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "ipv6_dst_addr ::ffff:224.0.0.1";
+                return r;
+            }
+            if (asset.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_location_ipv6_nz lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            if (mpt.value.table_length != 31u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "table_length 31 (5-byte prefix + 26-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8_location_ipv4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id8_location_ipv4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (asset.value.ipv4_src_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "ipv4_src_addr 0";
+                return r;
+            }
+            if (asset.value.ipv4_dst_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "ipv4_dst_addr 0";
+                return r;
+            }
+            if (asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv4 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            if (mpt.value.table_length != 55u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "table_length 55 (5-byte prefix + 50-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_id8_location_ipv6";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_id8_location_ipv6::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "asset_id_length 1";
+                return r;
+            }
+            if (asset.value.asset_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "asset_id 1";
+                return r;
+            }
+            if (asset.value.location_count != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "location_count 1";
+                return r;
+            }
+            if (asset.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (asset.value.ipv6_src_addr_0 != 0u ||
+                asset.value.ipv6_src_addr_1 != 0u ||
+                asset.value.ipv6_src_addr_2 != 0u ||
+                asset.value.ipv6_src_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "zero ipv6_src_addr words";
+                return r;
+            }
+            if (asset.value.ipv6_dst_addr_0 != 0u ||
+                asset.value.ipv6_dst_addr_1 != 0u ||
+                asset.value.ipv6_dst_addr_2 != 0u ||
+                asset.value.ipv6_dst_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "zero ipv6_dst_addr words";
+                return r;
+            }
+            if (asset.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_id8_location_ipv6 lab requires "
+                    "asset_descriptors_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_mpt_asset_descriptors4) {
+            if (mpt.value.table_length != 23u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "table_length 23 (5-byte prefix + 18-byte asset)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(
+                mpt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.number_of_assets != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "number_of_assets 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_table_body_prefix must be 5 octets "
+                    "before mmt_si_mpt_asset_descriptors4";
+                return r;
+            }
+            const auto asset_span =
+                mpt.value.payload.subspan(pref.bytes_consumed);
+            auto asset =
+                atsc3::mmt_si_mpt_asset_descriptors4::decode(asset_span);
+            if (!asset.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 decode failed: " +
+                    asset.error;
+                return r;
+            }
+            if (asset.bytes_consumed != asset_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 consumed " +
+                    std::to_string(asset.bytes_consumed) + " of " +
+                    std::to_string(asset_span.size()) +
+                    " asset octets after MPT prefix";
+                return r;
+            }
+            if (asset.value.asset_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "asset_id_length 0";
+                return r;
+            }
+            if (asset.value.location_count != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "location_count 0";
+                return r;
+            }
+            if (asset.value.asset_descriptors_length != 4u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "asset_descriptors_length 4";
+                return r;
+            }
+            if (asset.value.descriptor_byte0 != 0xDEu ||
+                asset.value.descriptor_byte1 != 0xADu ||
+                asset.value.descriptor_byte2 != 0xBEu ||
+                asset.value.descriptor_byte3 != 0xEFu) {
+                r.error =
+                    "encoder_pipeline: mmt_si_mpt_asset_descriptors4 lab requires "
+                    "descriptor octets DE AD BE EF";
+                return r;
+            }
+        }
+    }
+
+    if (_cfg.validate_mmt_si_mpt_table_body_prefix &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_table_body_prefix requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset && !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_descriptors4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_descriptors4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_descriptors4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location0 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location0 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        !_cfg.validate_mmt_si_mpt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 requires "
+            "validate_mmt_si_mpt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id16_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4 and "
+            "validate_mmt_si_mpt_asset_id8_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id16_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv4_nz and "
+            "validate_mmt_si_mpt_asset_id8_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id16_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6 and "
+            "validate_mmt_si_mpt_asset_id8_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id16_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz &&
+        _cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_location_ipv6_nz and "
+            "validate_mmt_si_mpt_asset_id8_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id16_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_descriptors4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location0) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location0 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6 are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+    if (_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 &&
+        _cfg.validate_mmt_si_mpt_asset_id16_descriptors4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_mpt_asset_id8_descriptors4 and "
+            "validate_mmt_si_mpt_asset_id16_descriptors4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_table_body) {
+        auto plt = atsc3::mmt_si_plt_table::decode(payload);
+        if (!plt.ok) {
+            r.error = "encoder_pipeline: mmt_si_plt_table decode failed: " +
+                      plt.error;
+            return r;
+        }
+        if (plt.bytes_consumed != payload.size()) {
+            r.error =
+                "encoder_pipeline: mmt_si_plt_table decode consumed " +
+                std::to_string(plt.bytes_consumed) + " of " +
+                std::to_string(payload.size()) + " ingress octets";
+            return r;
+        }
+        if (plt.value.table_id != 128u) {
+            r.error =
+                "encoder_pipeline: mmt_si_plt_table table_id must be 0x80 (128)";
+            return r;
+        }
+        if (_cfg.validate_mmt_si_plt_table_body_prefix) {
+            if (plt.value.table_length != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix lab requires "
+                    "table_length 2 (minimal PLT prefix)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.bytes_consumed != plt.value.payload.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix consumed " +
+                    std::to_string(pref.bytes_consumed) + " of " +
+                    std::to_string(plt.value.payload.size()) +
+                    " PLT table_length octets";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info) {
+            if (plt.value.table_length != 9u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info lab requires "
+                    "table_length 9 (2-byte prefix + 7-byte DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery = atsc3::mmt_si_plt_delivery_info::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info lab requires "
+                    "location_type 0";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_ipv4) {
+            if (plt.value.table_length != 19u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 lab requires "
+                    "table_length 19 (2-byte prefix + 17-byte IPv4 DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_ipv4";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery =
+                atsc3::mmt_si_plt_delivery_info_ipv4::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " IPv4 DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4 lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+            if (plt.value.table_length != 19u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "table_length 19 (2-byte prefix + 17-byte IPv4 DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_ipv4_nz";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery =
+                atsc3::mmt_si_plt_delivery_info_ipv4_nz::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " IPv4 DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (delivery.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (delivery.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (delivery.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv4_nz lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_ipv6) {
+            if (plt.value.table_length != 43u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 lab requires "
+                    "table_length 43 (2-byte prefix + 41-byte IPv6 DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_ipv6";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery =
+                atsc3::mmt_si_plt_delivery_info_ipv6::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " IPv6 DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_ipv6 lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_url) {
+            if (plt.value.table_length != 10u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "table_length 10 (2-byte prefix + 8-byte URL DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_url";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery = atsc3::mmt_si_plt_delivery_info_url::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " URL DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "location_type 5";
+                return r;
+            }
+            if (delivery.value.url_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "url_length 0";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_url_3) {
+            if (plt.value.table_length != 13u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "table_length 13 (2-byte prefix + 11-byte URL DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_url_3";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery =
+                atsc3::mmt_si_plt_delivery_info_url_3::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " URL DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "location_type 5";
+                return r;
+            }
+            if (delivery.value.url_length != 3u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "url_length 3";
+                return r;
+            }
+            if (delivery.value.url_byte0 != 0x6Cu || delivery.value.url_byte1 != 0x61u ||
+                delivery.value.url_byte2 != 0x62u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "URL octets 6c 61 62 (lab)";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_3 lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_delivery_info_url_4) {
+            if (plt.value.table_length != 14u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "table_length 14 (2-byte prefix + 12-byte URL DeliveryInfo)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "num_of_packages 0";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "num_of_ip_delivery 1";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_delivery_info_url_4";
+                return r;
+            }
+            const auto delivery_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto delivery =
+                atsc3::mmt_si_plt_delivery_info_url_4::decode(delivery_span);
+            if (!delivery.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 decode failed: " +
+                    delivery.error;
+                return r;
+            }
+            if (delivery.bytes_consumed != delivery_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 consumed " +
+                    std::to_string(delivery.bytes_consumed) + " of " +
+                    std::to_string(delivery_span.size()) +
+                    " URL DeliveryInfo octets after PLT prefix";
+                return r;
+            }
+            if (delivery.value.location_type != 5u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "location_type 5";
+                return r;
+            }
+            if (delivery.value.url_length != 4u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "url_length 4";
+                return r;
+            }
+            if (delivery.value.url_byte0 != 0x68u ||
+                delivery.value.url_byte1 != 0x74u ||
+                delivery.value.url_byte2 != 0x74u ||
+                delivery.value.url_byte3 != 0x70u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "URL octets 68 74 74 70 (http)";
+                return r;
+            }
+            if (delivery.value.descripor_loop_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_delivery_info_url_4 lab requires "
+                    "descripor_loop_length 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry) {
+            if (plt.value.table_length != 6u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "table_length 6 (2-byte prefix + 4-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry = atsc3::mmt_si_plt_package_entry::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "MMT_package_id_length 0";
+                return r;
+            }
+            if (entry.value.location_type != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "location_type 0";
+                return r;
+            }
+            if (entry.value.packet_id != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry lab requires "
+                    "packet_id 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_id8) {
+            if (plt.value.table_length != 7u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "table_length 7 (2-byte prefix + 5-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_id8";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_id8::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "MMT_package_id_length 1";
+                return r;
+            }
+            if (entry.value.MMT_package_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "MMT_package_id 1";
+                return r;
+            }
+            if (entry.value.location_type != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "location_type 0";
+                return r;
+            }
+            if (entry.value.packet_id != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8 lab requires "
+                    "packet_id 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_ipv4) {
+            if (plt.value.table_length != 14u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "table_length 14 (2-byte prefix + 12-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_ipv4";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_ipv4::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "MMT_package_id_length 0";
+                return r;
+            }
+            if (entry.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (entry.value.ipv4_src_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "ipv4_src_addr 0";
+                return r;
+            }
+            if (entry.value.ipv4_dst_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "ipv4_dst_addr 0";
+                return r;
+            }
+            if (entry.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+            if (plt.value.table_length != 14u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "table_length 14 (2-byte prefix + 12-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_ipv4_nz";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_ipv4_nz::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "MMT_package_id_length 0";
+                return r;
+            }
+            if (entry.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "location_type 1";
+                return r;
+            }
+            if (entry.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (entry.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (entry.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv4_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            if (plt.value.table_length != 15u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires table_length 15 (2-byte prefix + 13-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_id8_location_ipv4_nz";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_id8_location_ipv4_nz::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                    "decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz "
+                    "consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires MMT_package_id_length 1";
+                return r;
+            }
+            if (entry.value.MMT_package_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires MMT_package_id 1";
+                return r;
+            }
+            if (entry.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires location_type 1";
+                return r;
+            }
+            if (entry.value.ipv4_src_addr != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires ipv4_src_addr 10.0.0.1";
+                return r;
+            }
+            if (entry.value.ipv4_dst_addr != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires ipv4_dst_addr 224.0.0.1";
+                return r;
+            }
+            if (entry.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4_nz lab "
+                    "requires dst_port 5000";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            if (plt.value.table_length != 39u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires table_length 39 (2-byte prefix + 37-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_id8_location_ipv6_nz";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_id8_location_ipv6_nz::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                    "decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz "
+                    "consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires MMT_package_id_length 1";
+                return r;
+            }
+            if (entry.value.MMT_package_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires MMT_package_id 1";
+                return r;
+            }
+            if (entry.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires location_type 2";
+                return r;
+            }
+            if (entry.value.ipv6_src_addr_0 != 0u ||
+                entry.value.ipv6_src_addr_1 != 0u ||
+                entry.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+                entry.value.ipv6_src_addr_3 != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires ipv6_src_addr ::ffff:10.0.0.1";
+                return r;
+            }
+            if (entry.value.ipv6_dst_addr_0 != 0u ||
+                entry.value.ipv6_dst_addr_1 != 0u ||
+                entry.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+                entry.value.ipv6_dst_addr_3 != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires ipv6_dst_addr ::ffff:224.0.0.1";
+                return r;
+            }
+            if (entry.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6_nz lab "
+                    "requires dst_port 5000";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            if (plt.value.table_length != 15u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires table_length 15 (2-byte prefix + 13-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_id8_location_ipv4";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_id8_location_ipv4::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 "
+                    "decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 "
+                    "consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires MMT_package_id_length 1";
+                return r;
+            }
+            if (entry.value.MMT_package_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires MMT_package_id 1";
+                return r;
+            }
+            if (entry.value.location_type != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires location_type 1";
+                return r;
+            }
+            if (entry.value.ipv4_src_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires ipv4_src_addr 0";
+                return r;
+            }
+            if (entry.value.ipv4_dst_addr != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires ipv4_dst_addr 0";
+                return r;
+            }
+            if (entry.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv4 lab "
+                    "requires dst_port 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            if (plt.value.table_length != 39u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires table_length 39 (2-byte prefix + 37-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_id8_location_ipv6";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_id8_location_ipv6::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 "
+                    "decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 "
+                    "consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires MMT_package_id_length 1";
+                return r;
+            }
+            if (entry.value.MMT_package_id != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires MMT_package_id 1";
+                return r;
+            }
+            if (entry.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires location_type 2";
+                return r;
+            }
+            if (entry.value.ipv6_src_addr_0 != 0u ||
+                entry.value.ipv6_src_addr_1 != 0u ||
+                entry.value.ipv6_src_addr_2 != 0u ||
+                entry.value.ipv6_src_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires zero ipv6_src_addr words";
+                return r;
+            }
+            if (entry.value.ipv6_dst_addr_0 != 0u ||
+                entry.value.ipv6_dst_addr_1 != 0u ||
+                entry.value.ipv6_dst_addr_2 != 0u ||
+                entry.value.ipv6_dst_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires zero ipv6_dst_addr words";
+                return r;
+            }
+            if (entry.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_id8_location_ipv6 lab "
+                    "requires dst_port 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_ipv6) {
+            if (plt.value.table_length != 38u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "table_length 38 (2-byte prefix + 36-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_ipv6";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_ipv6::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "MMT_package_id_length 0";
+                return r;
+            }
+            if (entry.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (entry.value.ipv6_src_addr_0 != 0u ||
+                entry.value.ipv6_src_addr_1 != 0u ||
+                entry.value.ipv6_src_addr_2 != 0u ||
+                entry.value.ipv6_src_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "zero ipv6_src_addr words";
+                return r;
+            }
+            if (entry.value.ipv6_dst_addr_0 != 0u ||
+                entry.value.ipv6_dst_addr_1 != 0u ||
+                entry.value.ipv6_dst_addr_2 != 0u ||
+                entry.value.ipv6_dst_addr_3 != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "zero ipv6_dst_addr words";
+                return r;
+            }
+            if (entry.value.dst_port != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6 lab requires "
+                    "dst_port 0";
+                return r;
+            }
+        }
+        if (_cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+            if (plt.value.table_length != 38u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "table_length 38 (2-byte prefix + 36-byte package entry)";
+                return r;
+            }
+            auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(
+                plt.value.payload);
+            if (!pref.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix decode failed: " +
+                    pref.error;
+                return r;
+            }
+            if (pref.value.num_of_packages != 1u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "num_of_packages 1";
+                return r;
+            }
+            if (pref.value.num_of_ip_delivery != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "num_of_ip_delivery 0";
+                return r;
+            }
+            if (pref.bytes_consumed != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_table_body_prefix must be 2 octets "
+                    "before mmt_si_plt_package_entry_ipv6_nz";
+                return r;
+            }
+            const auto entry_span =
+                plt.value.payload.subspan(pref.bytes_consumed);
+            auto entry =
+                atsc3::mmt_si_plt_package_entry_ipv6_nz::decode(entry_span);
+            if (!entry.ok) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz decode failed: " +
+                    entry.error;
+                return r;
+            }
+            if (entry.bytes_consumed != entry_span.size()) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz consumed " +
+                    std::to_string(entry.bytes_consumed) + " of " +
+                    std::to_string(entry_span.size()) +
+                    " package entry octets after PLT prefix";
+                return r;
+            }
+            if (entry.value.MMT_package_id_length != 0u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "MMT_package_id_length 0";
+                return r;
+            }
+            if (entry.value.location_type != 2u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "location_type 2";
+                return r;
+            }
+            if (entry.value.ipv6_src_addr_0 != 0u ||
+                entry.value.ipv6_src_addr_1 != 0u ||
+                entry.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+                entry.value.ipv6_src_addr_3 != 0x0A000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "ipv6_src_addr ::ffff:10.0.0.1";
+                return r;
+            }
+            if (entry.value.ipv6_dst_addr_0 != 0u ||
+                entry.value.ipv6_dst_addr_1 != 0u ||
+                entry.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+                entry.value.ipv6_dst_addr_3 != 0xE0000001u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "ipv6_dst_addr ::ffff:224.0.0.1";
+                return r;
+            }
+            if (entry.value.dst_port != 5000u) {
+                r.error =
+                    "encoder_pipeline: mmt_si_plt_package_entry_ipv6_nz lab requires "
+                    "dst_port 5000";
+                return r;
+            }
+        }
+    }
+
+    if (_cfg.validate_mmt_si_plt_table_body_prefix &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_table_body_prefix requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_delivery_info_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_url) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_url are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_delivery_info_url are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_delivery_info_url are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_3) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_url_3 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_3) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_delivery_info_url_3 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_3) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_delivery_info_url_3 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_3) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_delivery_info_url_3 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4_nz requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4_nz and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_url_4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_delivery_info_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_delivery_info_url_4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_delivery_info_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_delivery_info_url_4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_delivery_info_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_delivery_info_url_4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_delivery_info_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_delivery_info_url_4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_delivery_info_url_4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_delivery_info_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_delivery_info_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_id8) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_id8 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz "
+            "requires validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz "
+            "and validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6_nz "
+            "requires validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6_nz "
+            "and validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 "
+            "requires validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 "
+            "and validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv4 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6 requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6 and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6_nz and "
+            "validate_mmt_si_plt_package_entry_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6 "
+            "requires validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6 "
+            "and validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6_nz and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6 and "
+            "validate_mmt_si_plt_package_entry_id8_location_ipv6 are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6_nz &&
+        !_cfg.validate_mmt_si_plt_table_body) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6_nz requires "
+            "validate_mmt_si_plt_table_body";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6_nz &&
+        _cfg.validate_mmt_si_plt_table_body_prefix) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6_nz and "
+            "validate_mmt_si_plt_table_body_prefix are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_3 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_3 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_delivery_info_url_4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_delivery_info_url_4 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv4_nz and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6_nz and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+        _cfg.validate_mmt_si_plt_package_entry_ipv6_nz) {
+        r.error =
+            "encoder_pipeline: validate_mmt_si_plt_package_entry_id8_location_ipv6 and "
+            "validate_mmt_si_plt_package_entry_ipv6_nz are mutually exclusive";
+        return r;
+    }
+
+    if (_cfg.prepend_mmt_si_pa_table_headers) {
+        if (!_cfg.prepend_mmt_si_message_header_len32) {
+            r.error =
+                "encoder_pipeline: prepend_mmt_si_pa_table_headers requires "
+                "prepend_mmt_si_message_header_len32";
+            return r;
+        }
+        if (_cfg.mmt_si_message_id != 0u) {
+            r.error =
+                "encoder_pipeline: prepend_mmt_si_pa_table_headers requires "
+                "mmt_si_message_id 0 (PA message lab)";
+            return r;
+        }
+        if (_cfg.mmt_si_pa_table_header_rows.size() > 255u) {
+            r.error =
+                "encoder_pipeline: mmt_si_pa_table_header_rows size must be <= 255";
+            return r;
+        }
+        if (_cfg.mmt_si_pa_table_header_rows.empty()) {
+            r.error =
+                "encoder_pipeline: prepend_mmt_si_pa_table_headers requires "
+                "at least one mmt_si_pa_table_header_row";
+            return r;
+        }
+        std::size_t body_total = 0;
+        bool any_zero_len    = false;
+        bool any_nonzero_len = false;
+        for (const auto& row : _cfg.mmt_si_pa_table_header_rows) {
+            body_total += row.table_length;
+            if (row.table_length == 0u) {
+                any_zero_len = true;
+            } else {
+                any_nonzero_len = true;
+            }
+            if (_cfg.validate_mmt_si_mpt_table_body && row.table_id == 32u &&
+                row.table_length != 0u &&
+                static_cast<std::size_t>(row.table_length) != payload.size()) {
+                r.error =
+                    "encoder_pipeline: PA MPT row table_length must match "
+                    "mmt_si_mpt_table ingress size";
+                return r;
+            }
+            if (_cfg.validate_mmt_si_plt_table_body && row.table_id == 128u &&
+                row.table_length != 0u &&
+                static_cast<std::size_t>(row.table_length) != payload.size()) {
+                r.error =
+                    "encoder_pipeline: PA PLT row table_length must match "
+                    "mmt_si_plt_table ingress size";
+                return r;
+            }
+        }
+        if (body_total > payload.size()) {
+            r.error =
+                "encoder_pipeline: sum of PA table_length (" +
+                std::to_string(body_total) +
+                ") exceeds ingress octet length (" +
+                std::to_string(payload.size()) + ")";
+            return r;
+        }
+        const auto& rows = _cfg.mmt_si_pa_table_header_rows;
+        if (rows.size() == 1u) {
+            const auto& row = rows.front();
+            if (row.table_length != 0u &&
+                static_cast<std::size_t>(row.table_length) != payload.size()) {
+                r.error =
+                    "encoder_pipeline: single PA table row table_length (" +
+                    std::to_string(row.table_length) +
+                    ") must equal ingress octet length (" +
+                    std::to_string(payload.size()) +
+                    ") when non-zero (§10.3 table-body lab)";
+                return r;
+            }
+        } else if (any_nonzero_len && !any_zero_len &&
+                   body_total != payload.size()) {
+            r.error =
+                "encoder_pipeline: multi-table PA rows (all table_length > 0): "
+                "sum(table_length) (" +
+                std::to_string(body_total) +
+                ") must equal ingress octet length (" +
+                std::to_string(payload.size()) +
+                ") (§10.3 concatenated table bodies)";
+            return r;
+        }
+    }
 
     if (want_mmtp || want_lct) {
         alp_storage.emplace();
         std::vector<std::byte>& buf = *alp_storage;
+        bool mmtp_si_lab_suffix_consumed_payload = false;
 
         if (want_mmtp) {
             auto w0 = _cfg.mmtp_word0;
@@ -237,6 +6339,83 @@ encoder_pipeline::result encoder_pipeline::encode(
                         }
                         buf.insert(buf.end(), chunk.begin(), chunk.end());
                     }
+                }
+                if (_cfg.prepend_mmt_si_length32_envelope ||
+                    _cfg.prepend_mmt_si_descriptor_loop_u32 ||
+                    _cfg.prepend_mmt_si_message_header_len32 ||
+                    _cfg.prepend_mmt_si_pa_table_headers) {
+                    std::vector<std::byte> si_blob;
+                    si_blob.assign(payload.begin(), payload.end());
+                    if (_cfg.prepend_mmt_si_pa_table_headers) {
+                        atsc3::mmt_si_pa_table_headers::decoded_t ph{};
+                        ph.number_of_tables = static_cast<std::uint8_t>(
+                            _cfg.mmt_si_pa_table_header_rows.size());
+                        ph.table_headers_byte_length = 0;
+                        for (const auto& row : _cfg.mmt_si_pa_table_header_rows) {
+                            atsc3::mmt_si_table_header_word32::decoded_t el{};
+                            el.table_id      = row.table_id;
+                            el.table_version = row.table_version;
+                            el.table_length  = row.table_length;
+                            ph.elements.push_back(el);
+                        }
+                        auto phe = atsc3::mmt_si_pa_table_headers::encode(ph);
+                        if (!phe.ok) {
+                            r.error =
+                                "encoder_pipeline: mmt_si_pa_table_headers encode failed: " +
+                                phe.error;
+                            return r;
+                        }
+                        std::vector<std::byte> tmp;
+                        tmp.reserve(phe.bytes.size() + si_blob.size());
+                        tmp.insert(tmp.end(), phe.bytes.begin(), phe.bytes.end());
+                        tmp.insert(tmp.end(), si_blob.begin(), si_blob.end());
+                        si_blob = std::move(tmp);
+                    }
+                    if (_cfg.prepend_mmt_si_descriptor_loop_u32) {
+                        std::vector<std::byte> tmp;
+                        tmp.reserve(sizeof(std::uint32_t) + si_blob.size());
+                        append_u32_be(
+                            &tmp,
+                            static_cast<std::uint32_t>(si_blob.size()));
+                        tmp.insert(tmp.end(), si_blob.begin(), si_blob.end());
+                        si_blob = std::move(tmp);
+                    }
+                    if (_cfg.prepend_mmt_si_length32_envelope) {
+                        atsc3::mmt_si_length32_envelope::decoded_t env{};
+                        env.body_byte_length =
+                            static_cast<std::uint32_t>(si_blob.size());
+                        env.payload = std::span<const std::byte>(
+                            si_blob.data(), si_blob.size());
+                        auto eenc =
+                            atsc3::mmt_si_length32_envelope::encode(env);
+                        if (!eenc.ok) {
+                            r.error =
+                                "encoder_pipeline: mmt_si_length32_envelope encode failed: " +
+                                eenc.error;
+                            return r;
+                        }
+                        si_blob.assign(eenc.bytes.begin(), eenc.bytes.end());
+                    }
+                    if (_cfg.prepend_mmt_si_message_header_len32) {
+                        atsc3::mmt_si_message_header_len32::decoded_t mh{};
+                        mh.message_id = _cfg.mmt_si_message_id;
+                        mh.message_version = _cfg.mmt_si_message_version;
+                        mh.message_byte_length =
+                            static_cast<std::uint32_t>(si_blob.size());
+                        mh.payload = std::span<const std::byte>(
+                            si_blob.data(), si_blob.size());
+                        auto mhe = atsc3::mmt_si_message_header_len32::encode(mh);
+                        if (!mhe.ok) {
+                            r.error =
+                                "encoder_pipeline: mmt_si_message_header_len32 encode failed: " +
+                                mhe.error;
+                            return r;
+                        }
+                        buf.insert(buf.end(), mhe.bytes.begin(), mhe.bytes.end());
+                    } else {
+                        buf.insert(buf.end(), si_blob.begin(), si_blob.end());
+                    }
+                    mmtp_si_lab_suffix_consumed_payload = true;
                 }
             } else if (_cfg.prepend_mmtp_isobmff_prefix) {
                 const auto& ip0 = _cfg.mmtp_isobmff_prefix;
@@ -377,6 +6556,15 @@ encoder_pipeline::result encoder_pipeline::encode(
                         }
                     }
                 }
+            } else if (_cfg.prepend_mmtp_gfd_header) {
+                auto gh = atsc3::mmtp_payload_gfd_header::encode(_cfg.mmtp_gfd_header);
+                if (!gh.ok || gh.bytes.size() != k_mmtp_gfd_header_octets) {
+                    r.error =
+                        "encoder_pipeline: MMTP GFD payload header encode failed: " +
+                        gh.error;
+                    return r;
+                }
+                buf.insert(buf.end(), gh.bytes.begin(), gh.bytes.end());
             }
         }
 
@@ -437,7 +6625,11 @@ encoder_pipeline::result encoder_pipeline::encode(
             buf.reserve(buf.size() + payload.size());
         }
 
-        buf.insert(buf.end(), payload.begin(), payload.end());
+        const bool mmtp_skip_raw_payload =
+            want_mmtp && mmtp_si_lab_suffix_consumed_payload;
+        if (!mmtp_skip_raw_payload) {
+            buf.insert(buf.end(), payload.begin(), payload.end());
+        }
         alp_body = std::span<const std::byte>(buf.data(), buf.size());
     }
 
@@ -455,8 +6647,8 @@ encoder_pipeline::result encoder_pipeline::encode(
 
     atsc3::alp::decoded_t alp{};
     alp.packet_type    = _cfg.alp_type;
-    alp.payload_config = false;
-    alp.header_mode    = false;
+    alp.payload_config = _cfg.alp_payload_config;
+    alp.header_mode      = _cfg.alp_header_mode;
     alp.payload_length = static_cast<std::uint16_t>(alp_body.size());
     alp.payload        = alp_body;
 

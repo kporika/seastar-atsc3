@@ -1,0 +1,30 @@
+# MMT-SI — **Package List Table** package entry (**MMT_package_id_length** **0** lab slice).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`PackageListTable::Unpack`**
+# after **num_of_packages**: **MMT_package_id_length**, optional **MMT_package_id** octets, then
+# **MMT_general_location_info**. This YAML is **id_length** **0** with **location_type** **0**
+# (**packet_id** only). Variable package-id octets and other location types are future YAML.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_package_entry
+  proto_id: 31
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT package entry lab; id_length 0, location_type 0)"
+  description: "package_id_length + same-flow general_location_info (4 B)"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: MMT_package_id_length, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: packet_id, bit_offset: 16, bit_width: 16, type: uint }
+
+fixtures:
+  - name: minimal_zero_id_same_flow
+    description: "zero package id, same-flow location, packet_id 0"
+    raw_hex: "00 00 00 00"
+    expected:
+      MMT_package_id_length: 0
+      location_type: 0
+      packet_id: 0

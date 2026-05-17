@@ -1,0 +1,34 @@
+# MMT-SI — **Package List Table** **DeliveryInfo** IPv4 with non-zero addresses (**AAE** lab).
+#
+# Same wire layout as **`mmt_si_plt_delivery_info_ipv4`**; fixture uses **src** **10.0.0.1**,
+# **dst** **224.0.0.1**, **dst_port** **5000**.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_plt_delivery_info_ipv4_nz
+  proto_id: 46
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PLT DeliveryInfo IPv4 lab; non-zero addrs)"
+  description: "transport_file_id + location_type 1 + non-zero IPv4 + port (17 B)"
+
+header:
+  total_bits: 136
+  fields:
+    - { name: transport_file_id, bit_offset: 0, bit_width: 32, type: uint }
+    - { name: location_type, bit_offset: 32, bit_width: 8, type: uint }
+    - { name: ipv4_src_addr, bit_offset: 40, bit_width: 32, type: uint }
+    - { name: ipv4_dst_addr, bit_offset: 72, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 104, bit_width: 16, type: uint }
+    - { name: descripor_loop_length, bit_offset: 120, bit_width: 16, type: uint }
+
+fixtures:
+  - name: lab_multicast_flow
+    description: "IPv4 flow 10.0.0.1 -> 224.0.0.1:5000, zero descriptor loop"
+    raw_hex: "00 00 00 00 01 0a 00 00 01 e0 00 00 01 13 88 00 00"
+    expected:
+      transport_file_id: 0
+      location_type: 1
+      ipv4_src_addr: 167772161
+      ipv4_dst_addr: 3758096385
+      dst_port: 5000
+      descripor_loop_length: 0

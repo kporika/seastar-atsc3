@@ -1,0 +1,59 @@
+# MMTP — **payload header for signalling message mode** (ISO/IEC 23008-1 **9.3.4**).
+# Applies when **payload_type** in `mmtp_header_word0` is **0x02** (signalling).
+#
+# First **16 bits** (MSB-first): **fragmentation_indicator** (2b), **reserved** (4b,
+# zero), **length_extension_flag** (1b), **aggregation_flag** (1b), then
+# **fragment_counter** (8b). When **aggregation_flag** is **1**, zero or more
+# **`length`** + message body pairs follow ( **`length`** is **16** or **32** bits
+# unsigned depending on **length_extension_flag**); that loop is **not** in this
+# YAML — model repeated length-prefixed units separately or as opaque payload.
+# When **aggregation_flag** is **0**, the remainder of the MMTP payload after this
+# header is one signalling fragment / message (subject to **fragmentation_indicator**).
+#
+# Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).
+
+protocol:
+  name: mmtp_payload_signalling_prefix
+  proto_id: 16
+  spec: "ISO/IEC 23008-1 (MMTP signalling-message-mode payload header)"
+  description: "MMTP signalling payload — FI + reserved + length_ext + aggregation + fragment_counter"
+
+header:
+  total_bits: 16
+  fields:
+    - { name: fragmentation_indicator, bit_offset: 0, bit_width: 2, type: uint }
+    - { name: reserved, bit_offset: 2, bit_width: 4, type: uint }
+    - { name: length_extension_flag, bit_offset: 6, bit_width: 1, type: bool }
+    - { name: aggregation_flag, bit_offset: 7, bit_width: 1, type: bool }
+    - { name: fragment_counter, bit_offset: 8, bit_width: 8, type: uint }
+
+fixtures:
+  - name: not_fragmented_no_agg
+    description: "FI=00, reserved=0, L=0, A=0, frag_counter=0 → 00 00"
+    raw_hex: "00 00"
+    expected:
+      fragmentation_indicator: 0
+      reserved: 0
+      length_extension_flag: false
+      aggregation_flag: false
+      fragment_counter: 0
+
+  - name: first_fragment_length_ext_frag7
+    description: "FI=01 (value 1), reserved=0, L=1, A=0, frag_counter=7 → 42 07"
+    raw_hex: "42 07"
+    expected:
+      fragmentation_indicator: 1
+      reserved: 0
+      length_extension_flag: true
+      aggregation_flag: false
+      fragment_counter: 7
+
+  - name: aggregated_length_ext_reserved
+    description: "FI=00, reserved=0, L=1, A=1, frag_counter=0 → 03 00"
+    raw_hex: "03 00"
+    expected:
+      fragmentation_indicator: 0
+      reserved: 0
+      length_extension_flag: true
+      aggregation_flag: true
+      fragment_counter: 0

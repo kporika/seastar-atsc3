@@ -11,7 +11,7 @@
 #   make integ-all          # all host integ scripts (RTCM 12×96)
 #   make integ-stltp       # stltp:// lab UDP + strip + verify
 #   make integ-lct-word0    # gw --prepend-lct-word0 + mmt_probe verify strip
-#   make integ-mmtp-word0   # gw MMTP word-0 lab (E–P) + mmt_probe strip
+#   make integ-mmtp-word0   # gw MMTP word-0 lab (E–AAT) + mmt_probe strip
 #   make integ-lls         # lls:// Table 6.1 + gzip UDP + Python validate
 #
 # Quick start (zero local deps; everything runs in Docker):
@@ -24,7 +24,7 @@
 #   make image-integ-udp    # udp:// in the image
 #   make image-integ-admin  # PATCH /config in the image (needs python3)
 #   make image-integ-lct-word0 # M8 LCT word-0 prefix path in the image
-#   make image-integ-mmtp-word0 # M8 MMTP word-0 + optional ts_psn + optional LCT in the image
+#   make image-integ-mmtp-word0 # M8 MMTP lab (scripts/mmtp_word0_integration_test.sh phases E–AAT) in the image
 #   make image-integ-all    # full suite in the image (incl. RTCM 12×96)
 #   make image-integ-rtcm   # RTCM path only (12×96) in the image
 #   make image-integ-stltp     # STLTP lab UDP integration in the image
@@ -90,7 +90,7 @@ integ-stltp:
 integ-lct-word0:
 	./scripts/lct_word0_integration_test.sh
 
-# gw --prepend-mmtp-word0 (+ optional LCT) + mmt_probe verify --strip-mmtp-word0.
+# gw --prepend-mmtp-word0 (+ optional LCT / ISOBMFF lab flags) + mmt_probe verify --strip-mmtp-word0 (see scripts/mmtp_word0_integration_test.sh).
 integ-mmtp-word0:
 	./scripts/mmtp_word0_integration_test.sh
 
@@ -106,7 +106,7 @@ integ-rtcm:
 integ-admin:
 	./scripts/admin_patch_config_integration_test.sh
 
-# All integration scripts in one shot (RTCM uses 12×96 for speed).
+# All integration scripts in one shot (incl. MMTP lab E–AAT; RTCM uses 12×96).
 integ-all:
 	./scripts/run_all_integration.sh
 
@@ -167,7 +167,7 @@ image-integ-lct-word0: image
 image-integ-mmtp-word0: image
 	$(DOCKER) run --rm --entrypoint /opt/atsc3_proto/scripts/mmtp_word0_integration_test.sh $(APP_IMAGE)
 
-# Full integration suite (same order as CI; RTCM uses 12×96).
+# Full integration suite (same script order as scripts/run_all_integration.sh; RTCM 12×96).
 image-integ-all: image
 	set -e; \
 	for s in integration_test.sh udp_integration_test.sh ipv4udp_file_integration_test.sh stltp_integration_test.sh lls_integration_test.sh admin_patch_config_integration_test.sh m7_operator_integration_test.sh lct_word0_integration_test.sh mmtp_word0_integration_test.sh; do \

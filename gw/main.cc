@@ -32,6 +32,7 @@
 #include "admin_http.h"
 #include "atsc3_gw.h"
 #include "encoder_pipeline.h"
+#include "mmtp_payload_gfd_header_decoder.h"
 #include "mmtp_payload_isobmff_prefix_decoder.h"
 
 namespace bpo = boost::program_options;
@@ -105,6 +106,45 @@ bool parse_mmtp_extension_spec(const std::string& spec,
     return parse_even_hex_bytes(hex, out_val);
 }
 
+bool parse_mmtp_si_pa_table_row(
+    const std::string& tok,
+    atsc3::gw::encoder_pipeline::config::mmt_si_pa_table_header_row* out) {
+    const auto c1 = tok.find(':');
+    if (c1 == std::string::npos) {
+        return false;
+    }
+    const auto c2 = tok.find(':', c1 + 1);
+    if (c2 == std::string::npos) {
+        return false;
+    }
+    if (tok.find(':', c2 + 1) != std::string::npos) {
+        return false;
+    }
+    const std::string a = tok.substr(0, c1);
+    const std::string b = tok.substr(c1 + 1, c2 - c1 - 1);
+    const std::string c = tok.substr(c2 + 1);
+    if (a.empty() || b.empty() || c.empty()) {
+        return false;
+    }
+    char* e = nullptr;
+    const unsigned long v1 = std::strtoul(a.c_str(), &e, 0);
+    if (e != a.c_str() + a.size() || v1 > 255ul) {
+        return false;
+    }
+    const unsigned long v2 = std::strtoul(b.c_str(), &e, 0);
+    if (e != b.c_str() + b.size() || v2 > 255ul) {
+        return false;
+    }
+    const unsigned long v3 = std::strtoul(c.c_str(), &e, 0);
+    if (e != c.c_str() + c.size() || v3 > 65535ul) {
+        return false;
+    }
+    out->table_id      = static_cast<std::uint8_t>(v1);
+    out->table_version = static_cast<std::uint8_t>(v2);
+    out->table_length  = static_cast<std::uint16_t>(v3);
+    return true;
+}
+
 }  // namespace
 
 static seastar::logger mlog("main");
@@ -161,6 +201,14 @@ int main(int argc, char** argv) {
         ("lct-toi",
          bpo::value<std::uint32_t>()->default_value(0),
          "when --prepend-lct-word0 and --lct-include-toi: Transport Object Id")
+        ("alp-payload-config",
+         bpo::bool_switch()->default_value(false),
+         "set ATSC A/330 ALP base header payload_configuration (pc); lab path still "
+         "emits only the 16-bit base header + opaque body (no segmentation TLVs)")
+        ("alp-header-mode",
+         bpo::bool_switch()->default_value(false),
+         "set ATSC A/330 ALP base header header_mode (hm); lab path still omits "
+         "additional-header octets beyond the 16-bit base")
         ("prepend-mmtp-word0",
          bpo::bool_switch()->default_value(false),
          "M8 lab: prepend ISO/IEC 23008-1 MMTP packet header word-0 before ALP "
@@ -233,6 +281,208 @@ int main(int argc, char** argv) {
          "when --prepend-mmtp-signalling-prefix with --mmtp-signalling-aggregation: "
          "even-length hex for each aggregated message body (length prefix on wire "
          "= octet count; 16- or 32-bit BE per --mmtp-signalling-length-extension)")
+        ("prepend-mmt-si-length32-envelope",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-signalling-prefix (aggregation off): prepend "
+         "mmt_si_length32_envelope (BE32 ingress length + ingress) per "
+         "protocol/mmt_si_length32_envelope.yaml; requires --mmtp-payload-type 2")
+        ("prepend-mmt-si-descriptor-loop-u32",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-signalling-prefix (aggregation off): prepend "
+         "mmt_si_descriptor_loop_u32 (BE32 + ingress as mmtp_desc bytes) per "
+         "protocol/mmt_si_descriptor_loop_u32.yaml; requires --mmtp-payload-type 2")
+        ("prepend-mmt-si-message-header-len32",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-signalling-prefix (aggregation off): prepend "
+         "mmt_si_message_header_len32 (message_id + message_version + BE32 "
+         "message_byte_length + SI tail) per protocol/mmt_si_message_header_len32.yaml; "
+         "SI tail is optional mmt_si_pa_table_headers, optional mmt_si_descriptor_loop_u32, "
+         "and/or mmt_si_length32_envelope over ingress; requires --mmtp-payload-type 2")
+        ("mmtp-si-message-id",
+         bpo::value<unsigned>()->default_value(0),
+         "when --prepend-mmt-si-message-header-len32: 16-bit message_id (0=PA, 1..0xF=MPI, "
+         "0x10..0x1F=MPT per ISO/IEC 23008-1 §10.3 lab mapping)")
+        ("mmtp-si-message-version",
+         bpo::value<unsigned>()->default_value(0),
+         "when --prepend-mmt-si-message-header-len32: 8-bit message_version (0-255)")
+        ("prepend-mmt-si-pa-table-headers",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-signalling-prefix (aggregation off): prepend "
+         "mmt_si_pa_table_headers (PA §10.3 table index + 4B header rows) per "
+         "protocol/mmt_si_pa_table_headers.yaml before optional descriptor loop / "
+         "§10.2 envelope; requires --prepend-mmt-si-message-header-len32 and "
+         "--mmtp-si-message-id 0; requires --mmtp-payload-type 2")
+        ("mmtp-si-pa-table-row",
+         bpo::value<std::vector<std::string>>()->multitoken(),
+         "when --prepend-mmt-si-pa-table-headers: one or more ID:VERSION:LENGTH "
+         "rows (strtoul fields, e.g. 32:1:0 or 32:1:4); wire order = token order; "
+         "with one row and LENGTH>0, each payload must be LENGTH octets (table body); "
+         "with multiple rows all LENGTH>0, payload is bodies concatenated in token order; "
+         "with mixed LENGTH 0 and >0, payload is bodies then optional SI tail")
+        ("validate-mmt-si-mpt-table-body",
+         bpo::bool_switch()->default_value(false),
+         "ingress must decode as mmt_si_mpt_table (table_id 0x20) per "
+         "protocol/mmt_si_mpt_table.yaml")
+        ("validate-mmt-si-plt-table-body",
+         bpo::bool_switch()->default_value(false),
+         "ingress must decode as mmt_si_plt_table (table_id 0x80) per "
+         "protocol/mmt_si_plt_table.yaml")
+        ("validate-mmt-si-mpt-table-body-prefix",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; mmt_si_mpt_table table_length "
+         "region must decode as mmt_si_mpt_table_body_prefix (minimal lab: length 5)")
+        ("validate-mmt-si-mpt-asset",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset (ZK lab: table_length 19)")
+        ("validate-mmt-si-mpt-asset-id8",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8 (ZS lab: table_length 20)")
+        ("validate-mmt-si-mpt-asset-id16",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16 (AAG lab: table_length 21)")
+        ("validate-mmt-si-mpt-asset-location0",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_location0 (ZT lab: table_length 22)")
+        ("validate-mmt-si-mpt-asset-location-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_location_ipv4 (ZV lab: table_length 30)")
+        ("validate-mmt-si-mpt-asset-location-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_location_ipv4_nz (AAF lab: table_length 30)")
+        ("validate-mmt-si-mpt-asset-location-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_location_ipv6 (ZY lab: table_length 54)")
+        ("validate-mmt-si-mpt-asset-location-ipv6-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_location_ipv6_nz (AAH lab: table_length 54)")
+        ("validate-mmt-si-mpt-asset-id8-location-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8_location_ipv4 (ZW lab: table_length 31)")
+        ("validate-mmt-si-mpt-asset-id8-location-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8_location_ipv4_nz (AAM lab: table_length 31)")
+        ("validate-mmt-si-mpt-asset-id8-location-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8_location_ipv6 (AAA lab: table_length 55)")
+        ("validate-mmt-si-mpt-asset-id8-location-ipv6-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8_location_ipv6_nz (AAN lab: table_length 55)")
+        ("validate-mmt-si-mpt-asset-id16-location-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16_location_ipv4 (AAO lab: table_length 32)")
+        ("validate-mmt-si-mpt-asset-id16-location-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16_location_ipv4_nz (AAP lab: table_length 32)")
+        ("validate-mmt-si-mpt-asset-id16-location-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16_location_ipv6 (AAQ lab: table_length 55)")
+        ("validate-mmt-si-mpt-asset-id16-location-ipv6-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16_location_ipv6_nz (AAR lab: table_length 56)")
+        ("validate-mmt-si-mpt-asset-id16-descriptors4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id16_descriptors4 (AAS lab: table_length 25)")
+        ("validate-mmt-si-mpt-asset-id8-descriptors4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_id8_descriptors4 (AAT lab: table_length 24)")
+        ("validate-mmt-si-mpt-asset-descriptors4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-mpt-table-body; MPT body must decode as "
+         "mmt_si_mpt_table_body_prefix + mmt_si_mpt_asset_descriptors4 (AAC lab: table_length 23)")
+        ("validate-mmt-si-plt-table-body-prefix",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT table_length region must "
+         "decode as mmt_si_plt_table_body_prefix (minimal lab: length 2)")
+        ("validate-mmt-si-plt-delivery-info",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info (ZL lab: length 9)")
+        ("validate-mmt-si-plt-delivery-info-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_ipv4 (ZM lab: length 19)")
+        ("validate-mmt-si-plt-delivery-info-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_ipv6 (ZN lab: length 43)")
+        ("validate-mmt-si-plt-delivery-info-url",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_url (ZO lab: length 10)")
+        ("validate-mmt-si-plt-delivery-info-url-3",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_url_3 (ZQ lab: length 13)")
+        ("validate-mmt-si-plt-delivery-info-url-4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_url_4 (AAD lab: length 14)")
+        ("validate-mmt-si-plt-delivery-info-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_delivery_info_ipv4_nz (AAE lab: length 19)")
+        ("validate-mmt-si-plt-package-entry",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry (ZP lab: length 6)")
+        ("validate-mmt-si-plt-package-entry-id8",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_id8 (ZR lab: length 7)")
+        ("validate-mmt-si-plt-package-entry-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_ipv4 (ZU lab: length 14)")
+        ("validate-mmt-si-plt-package-entry-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_ipv4_nz (AAI lab: length 14)")
+        ("validate-mmt-si-plt-package-entry-id8-location-ipv4",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_id8_location_ipv4 "
+         "(ZX lab: length 15)")
+        ("validate-mmt-si-plt-package-entry-id8-location-ipv4-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_id8_location_ipv4_nz "
+         "(AAK lab: length 15)")
+        ("validate-mmt-si-plt-package-entry-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_ipv6 (ZZ lab: length 38)")
+        ("validate-mmt-si-plt-package-entry-ipv6-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_ipv6_nz (AAJ lab: length 38)")
+        ("validate-mmt-si-plt-package-entry-id8-location-ipv6",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_id8_location_ipv6 "
+         "(AAB lab: length 39)")
+        ("validate-mmt-si-plt-package-entry-id8-location-ipv6-nz",
+         bpo::bool_switch()->default_value(false),
+         "requires --validate-mmt-si-plt-table-body; PLT body must decode as "
+         "mmt_si_plt_table_body_prefix + mmt_si_plt_package_entry_id8_location_ipv6_nz "
+         "(AAL lab: length 39)")
         ("prepend-mmtp-isobmff-prefix",
          bpo::bool_switch()->default_value(false),
          "when --prepend-mmtp-word0: prepend MMTP ISOBMFF-mode payload header "
@@ -259,7 +509,8 @@ int main(int argc, char** argv) {
          bpo::value<std::vector<std::string>>()->multitoken(),
          "when --prepend-mmtp-isobmff-prefix with --mmtp-isobmff-aggregation: "
          "even-length hex per aggregated DU (DU_length on wire = octet count; "
-         "16-bit BE per ISO/IEC 23008-1)")
+         "16-bit BE per ISO/IEC 23008-1); with --prepend-mmtp-isobmff-du-header, "
+         "each token is media-only (wire DU_length includes DU_header octets)")
         ("mmtp-isobmff-fragment-counter",
          bpo::value<unsigned>()->default_value(0),
          "when --prepend-mmtp-isobmff-prefix: fragment_counter (0-255)")
@@ -268,8 +519,9 @@ int main(int argc, char** argv) {
          "when --prepend-mmtp-isobmff-prefix: sequence_number (32-bit BE on wire)")
         ("prepend-mmtp-isobmff-du-header",
          bpo::bool_switch()->default_value(false),
-         "when --prepend-mmtp-isobmff-prefix: emit DU_header after 64b prefix "
-         "(Fig. 4/5); requires --mmtp-isobmff-fragment-type 2")
+         "when --prepend-mmtp-isobmff-prefix: emit DU_header (Fig. 4/5) for "
+         "FT=2: after the 64b prefix when A=0, or once per aggregated DU when "
+         "A=1; requires --mmtp-isobmff-fragment-type 2")
         ("mmtp-isobmff-du-item-id",
          bpo::value<std::uint32_t>()->default_value(0),
          "when --prepend-mmtp-isobmff-du-header with T=0: item_id (BE32)")
@@ -287,7 +539,35 @@ int main(int argc, char** argv) {
          "when --prepend-mmtp-isobmff-du-header with T=1: subsample_priority (0-255)")
         ("mmtp-isobmff-du-dep-counter",
          bpo::value<unsigned>()->default_value(0),
-         "when --prepend-mmtp-isobmff-du-header with T=1: dependency_counter (0-255)");
+         "when --prepend-mmtp-isobmff-du-header with T=1: dependency_counter (0-255)")
+        ("prepend-mmtp-gfd-header",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-word0: prepend MMTP GFD-mode payload header "
+         "(96b, ISO/IEC 23008-1 Figure 6, protocol/mmtp_payload_gfd_header.yaml) "
+         "after optional ts_psn, packet_counter, extension; mutually exclusive with "
+         "--prepend-mmtp-signalling-prefix and --prepend-mmtp-isobmff-prefix; "
+         "requires --mmtp-payload-type 1 (GFD mode)")
+        ("mmtp-gfd-session-last",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-gfd-header: session_last_packet_flag (C)")
+        ("mmtp-gfd-object-last-packet",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-gfd-header: object_last_packet_flag (L)")
+        ("mmtp-gfd-object-last-byte",
+         bpo::bool_switch()->default_value(false),
+         "when --prepend-mmtp-gfd-header: object_last_byte_flag (B)")
+        ("mmtp-gfd-code-point",
+         bpo::value<unsigned>()->default_value(0),
+         "when --prepend-mmtp-gfd-header: code_point (0-255)")
+        ("mmtp-gfd-reserved",
+         bpo::value<unsigned>()->default_value(0),
+         "when --prepend-mmtp-gfd-header: reserved field (0-31, 5 bits)")
+        ("mmtp-gfd-toi",
+         bpo::value<std::uint32_t>()->default_value(0),
+         "when --prepend-mmtp-gfd-header: transport_object_identifier (BE32)")
+        ("mmtp-gfd-start-offset",
+         bpo::value<std::uint64_t>()->default_value(0),
+         "when --prepend-mmtp-gfd-header: start_offset (BE48 on wire)");
 
     return app.run(argc, argv, [&app]() -> seastar::future<int> {
         auto& cfg = app.configuration();
@@ -300,6 +580,8 @@ int main(int argc, char** argv) {
         const unsigned cp_in = cfg["lct-codepoint"].as<unsigned>();
         const std::uint32_t lct_tsi = cfg["lct-tsi"].as<std::uint32_t>();
         const std::uint32_t lct_toi = cfg["lct-toi"].as<std::uint32_t>();
+        const bool alp_pc = cfg["alp-payload-config"].as<bool>();
+        const bool alp_hm = cfg["alp-header-mode"].as<bool>();
         const bool prepend_mmtp = cfg["prepend-mmtp-word0"].as<bool>();
         const unsigned mmtp_pt_in = cfg["mmtp-payload-type"].as<unsigned>();
         const unsigned mmtp_pid_in = cfg["mmtp-packet-id"].as<unsigned>();
@@ -352,6 +634,114 @@ int main(int argc, char** argv) {
             cfg["mmtp-isobmff-du-priority"].as<unsigned>();
         const unsigned mmtp_iso_du_dep_counter =
             cfg["mmtp-isobmff-du-dep-counter"].as<unsigned>();
+        const bool prepend_mmtp_gfd =
+            cfg["prepend-mmtp-gfd-header"].as<bool>();
+        const bool mmtp_gfd_session_last =
+            cfg["mmtp-gfd-session-last"].as<bool>();
+        const bool mmtp_gfd_obj_last_pkt =
+            cfg["mmtp-gfd-object-last-packet"].as<bool>();
+        const bool mmtp_gfd_obj_last_byte =
+            cfg["mmtp-gfd-object-last-byte"].as<bool>();
+        const unsigned mmtp_gfd_code_point =
+            cfg["mmtp-gfd-code-point"].as<unsigned>();
+        const unsigned mmtp_gfd_reserved =
+            cfg["mmtp-gfd-reserved"].as<unsigned>();
+        const std::uint32_t mmtp_gfd_toi =
+            cfg["mmtp-gfd-toi"].as<std::uint32_t>();
+        const std::uint64_t mmtp_gfd_start_offset =
+            cfg["mmtp-gfd-start-offset"].as<std::uint64_t>();
+        const bool prepend_mmt_si_len32 =
+            cfg["prepend-mmt-si-length32-envelope"].as<bool>();
+        const bool prepend_mmt_si_desc_u32 =
+            cfg["prepend-mmt-si-descriptor-loop-u32"].as<bool>();
+        const bool prepend_mmt_si_msg_hdr =
+            cfg["prepend-mmt-si-message-header-len32"].as<bool>();
+        const bool prepend_mmt_si_pa_hdr =
+            cfg["prepend-mmt-si-pa-table-headers"].as<bool>();
+        const bool validate_mmt_si_mpt_body =
+            cfg["validate-mmt-si-mpt-table-body"].as<bool>();
+        const bool validate_mmt_si_plt_body =
+            cfg["validate-mmt-si-plt-table-body"].as<bool>();
+        const bool validate_mmt_si_mpt_body_prefix =
+            cfg["validate-mmt-si-mpt-table-body-prefix"].as<bool>();
+        const bool validate_mmt_si_mpt_asset =
+            cfg["validate-mmt-si-mpt-asset"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_descriptors4 =
+            cfg["validate-mmt-si-mpt-asset-descriptors4"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8 =
+            cfg["validate-mmt-si-mpt-asset-id8"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16 =
+            cfg["validate-mmt-si-mpt-asset-id16"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_location0 =
+            cfg["validate-mmt-si-mpt-asset-location0"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_location_ipv4 =
+            cfg["validate-mmt-si-mpt-asset-location-ipv4"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_location_ipv4_nz =
+            cfg["validate-mmt-si-mpt-asset-location-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_location_ipv6 =
+            cfg["validate-mmt-si-mpt-asset-location-ipv6"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_location_ipv6_nz =
+            cfg["validate-mmt-si-mpt-asset-location-ipv6-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8_location_ipv4 =
+            cfg["validate-mmt-si-mpt-asset-id8-location-ipv4"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8_location_ipv4_nz =
+            cfg["validate-mmt-si-mpt-asset-id8-location-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8_location_ipv6 =
+            cfg["validate-mmt-si-mpt-asset-id8-location-ipv6"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8_location_ipv6_nz =
+            cfg["validate-mmt-si-mpt-asset-id8-location-ipv6-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16_location_ipv4 =
+            cfg["validate-mmt-si-mpt-asset-id16-location-ipv4"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16_location_ipv4_nz =
+            cfg["validate-mmt-si-mpt-asset-id16-location-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16_location_ipv6 =
+            cfg["validate-mmt-si-mpt-asset-id16-location-ipv6"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16_location_ipv6_nz =
+            cfg["validate-mmt-si-mpt-asset-id16-location-ipv6-nz"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id16_descriptors4 =
+            cfg["validate-mmt-si-mpt-asset-id16-descriptors4"].as<bool>();
+        const bool validate_mmt_si_mpt_asset_id8_descriptors4 =
+            cfg["validate-mmt-si-mpt-asset-id8-descriptors4"].as<bool>();
+        const bool validate_mmt_si_plt_body_prefix =
+            cfg["validate-mmt-si-plt-table-body-prefix"].as<bool>();
+        const bool validate_mmt_si_plt_delivery =
+            cfg["validate-mmt-si-plt-delivery-info"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_ipv4 =
+            cfg["validate-mmt-si-plt-delivery-info-ipv4"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_ipv6 =
+            cfg["validate-mmt-si-plt-delivery-info-ipv6"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_url =
+            cfg["validate-mmt-si-plt-delivery-info-url"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_url_3 =
+            cfg["validate-mmt-si-plt-delivery-info-url-3"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_url_4 =
+            cfg["validate-mmt-si-plt-delivery-info-url-4"].as<bool>();
+        const bool validate_mmt_si_plt_delivery_ipv4_nz =
+            cfg["validate-mmt-si-plt-delivery-info-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry =
+            cfg["validate-mmt-si-plt-package-entry"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_id8 =
+            cfg["validate-mmt-si-plt-package-entry-id8"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_ipv4 =
+            cfg["validate-mmt-si-plt-package-entry-ipv4"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_ipv4_nz =
+            cfg["validate-mmt-si-plt-package-entry-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_id8_location_ipv4 =
+            cfg["validate-mmt-si-plt-package-entry-id8-location-ipv4"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_id8_location_ipv4_nz =
+            cfg["validate-mmt-si-plt-package-entry-id8-location-ipv4-nz"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_ipv6 =
+            cfg["validate-mmt-si-plt-package-entry-ipv6"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_ipv6_nz =
+            cfg["validate-mmt-si-plt-package-entry-ipv6-nz"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_id8_location_ipv6 =
+            cfg["validate-mmt-si-plt-package-entry-id8-location-ipv6"].as<bool>();
+        const bool validate_mmt_si_plt_package_entry_id8_location_ipv6_nz =
+            cfg["validate-mmt-si-plt-package-entry-id8-location-ipv6-nz"].as<bool>();
+        const unsigned mmtp_si_msg_id_in =
+            cfg["mmtp-si-message-id"].as<unsigned>();
+        const unsigned mmtp_si_msg_ver_in =
+            cfg["mmtp-si-message-version"].as<unsigned>();
         if (!prepend_lct && cp_in != 0u) {
             mlog.error("--lct-codepoint is only meaningful with --prepend-lct-word0");
             co_return 2;
@@ -372,6 +762,12 @@ int main(int argc, char** argv) {
             mlog.error(
                 "--prepend-mmtp-isobmff-prefix requires --mmtp-payload-type 0 "
                 "(ISOBMFF mode)");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && prepend_mmtp && mmtp_pt_in != 1u) {
+            mlog.error(
+                "--prepend-mmtp-gfd-header requires --mmtp-payload-type 1 "
+                "(GFD mode)");
             co_return 2;
         }
         if (prepend_mmtp && mmtp_pid_in > 65535u) {
@@ -430,6 +826,31 @@ int main(int argc, char** argv) {
             mlog.error(
                 "--prepend-mmtp-isobmff-prefix cannot be combined with "
                 "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && !prepend_mmtp) {
+            mlog.error(
+                "--prepend-mmtp-gfd-header requires --prepend-mmtp-word0");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && prepend_mmtp_sig) {
+            mlog.error(
+                "--prepend-mmtp-gfd-header cannot be combined with "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && prepend_mmtp_isobmff) {
+            mlog.error(
+                "--prepend-mmtp-gfd-header cannot be combined with "
+                "--prepend-mmtp-isobmff-prefix");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && mmtp_gfd_code_point > 255u) {
+            mlog.error("--mmtp-gfd-code-point must be <= 255");
+            co_return 2;
+        }
+        if (prepend_mmtp_gfd && mmtp_gfd_reserved > 31u) {
+            mlog.error("--mmtp-gfd-reserved must be <= 31");
             co_return 2;
         }
         if (prepend_mmtp_isobmff && mmtp_iso_ft > 15u) {
@@ -498,8 +919,2417 @@ int main(int argc, char** argv) {
                 "--mmtp-signalling-aggregation");
             co_return 2;
         }
+        if (prepend_mmt_si_len32 && !prepend_mmtp_sig) {
+            mlog.error(
+                "--prepend-mmt-si-length32-envelope requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmt_si_len32 && !prepend_mmtp) {
+            mlog.error(
+                "--prepend-mmt-si-length32-envelope requires --prepend-mmtp-word0");
+            co_return 2;
+        }
+        if (prepend_mmt_si_len32 && prepend_mmtp && mmtp_pt_in != 2u) {
+            mlog.error(
+                "--prepend-mmt-si-length32-envelope requires --mmtp-payload-type 2 "
+                "(signalling)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_len32 && mmtp_sig_agg) {
+            mlog.error(
+                "--prepend-mmt-si-length32-envelope requires "
+                "--mmtp-signalling-aggregation off (no §9.3.4 aggregate bodies)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_desc_u32 && !prepend_mmtp_sig) {
+            mlog.error(
+                "--prepend-mmt-si-descriptor-loop-u32 requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmt_si_desc_u32 && !prepend_mmtp) {
+            mlog.error(
+                "--prepend-mmt-si-descriptor-loop-u32 requires --prepend-mmtp-word0");
+            co_return 2;
+        }
+        if (prepend_mmt_si_desc_u32 && prepend_mmtp && mmtp_pt_in != 2u) {
+            mlog.error(
+                "--prepend-mmt-si-descriptor-loop-u32 requires --mmtp-payload-type 2 "
+                "(signalling)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_desc_u32 && mmtp_sig_agg) {
+            mlog.error(
+                "--prepend-mmt-si-descriptor-loop-u32 requires "
+                "--mmtp-signalling-aggregation off (no §9.3.4 aggregate bodies)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_msg_hdr && !prepend_mmtp_sig) {
+            mlog.error(
+                "--prepend-mmt-si-message-header-len32 requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmt_si_msg_hdr && !prepend_mmtp) {
+            mlog.error(
+                "--prepend-mmt-si-message-header-len32 requires --prepend-mmtp-word0");
+            co_return 2;
+        }
+        if (prepend_mmt_si_msg_hdr && prepend_mmtp && mmtp_pt_in != 2u) {
+            mlog.error(
+                "--prepend-mmt-si-message-header-len32 requires --mmtp-payload-type 2 "
+                "(signalling)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_msg_hdr && mmtp_sig_agg) {
+            mlog.error(
+                "--prepend-mmt-si-message-header-len32 requires "
+                "--mmtp-signalling-aggregation off (no §9.3.4 aggregate bodies)");
+            co_return 2;
+        }
+        if (mmtp_si_msg_id_in > 65535u) {
+            mlog.error("--mmtp-si-message-id must be <= 65535");
+            co_return 2;
+        }
+        if (mmtp_si_msg_ver_in > 255u) {
+            mlog.error("--mmtp-si-message-version must be <= 255");
+            co_return 2;
+        }
+        if (cfg.count("mmtp-si-pa-table-row") != 0 && !prepend_mmt_si_pa_hdr) {
+            mlog.error(
+                "--mmtp-si-pa-table-row requires --prepend-mmt-si-pa-table-headers");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && !prepend_mmt_si_msg_hdr) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires "
+                "--prepend-mmt-si-message-header-len32");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && mmtp_si_msg_id_in != 0u) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires --mmtp-si-message-id 0 "
+                "(PA message lab)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && !prepend_mmtp_sig) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && !prepend_mmtp) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires --prepend-mmtp-word0");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && prepend_mmtp && mmtp_pt_in != 2u) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires --mmtp-payload-type 2 "
+                "(signalling)");
+            co_return 2;
+        }
+        if (prepend_mmt_si_pa_hdr && mmtp_sig_agg) {
+            mlog.error(
+                "--prepend-mmt-si-pa-table-headers requires "
+                "--mmtp-signalling-aggregation off (no §9.3.4 aggregate bodies)");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_body && validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-table-body and "
+                "--validate-mmt-si-plt-table-body are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_body && !prepend_mmtp_sig) {
+            mlog.error(
+                "--validate-mmt-si-mpt-table-body requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_body && !prepend_mmtp_sig) {
+            mlog.error(
+                "--validate-mmt-si-plt-table-body requires "
+                "--prepend-mmtp-signalling-prefix");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_body_prefix && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-table-body-prefix requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 &&
+            validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4 &&
+            validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4_nz &&
+            validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 &&
+            validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4_nz &&
+            validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+            validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 &&
+            validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+            validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+            validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6_nz &&
+            validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4_nz &&
+            validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_descriptors4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-descriptors4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_descriptors4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-descriptors4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location0 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location0 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv4 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_location_ipv6 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv4 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6_nz &&
+            validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_location_ipv6 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && !validate_mmt_si_mpt_body) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 requires "
+                "--validate-mmt-si-mpt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id16_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4 && validate_mmt_si_mpt_asset_id8_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 and "
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id16_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv4_nz && validate_mmt_si_mpt_asset_id8_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz and "
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id16_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6 && validate_mmt_si_mpt_asset_id8_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 and "
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id16_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_location_ipv6_nz && validate_mmt_si_mpt_asset_id8_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz and "
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id16_descriptors4 && validate_mmt_si_mpt_asset_id8_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id8) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_location0) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location0 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_mpt_asset_id8_descriptors4 && validate_mmt_si_mpt_asset_id16_descriptors4) {
+            mlog.error(
+                "--validate-mmt-si-mpt-asset-id8-descriptors4 and "
+                "--validate-mmt-si-mpt-asset-id16-descriptors4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_body_prefix && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-table-body-prefix requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_delivery_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-delivery-info-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_delivery_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_delivery_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_url) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-url are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_delivery_url) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-delivery-info-url are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_delivery_url) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-delivery-info-url are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_url_3) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-url-3 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_delivery_url_3) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-delivery-info-url-3 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_delivery_url_3) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-delivery-info-url-3 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_delivery_url_3) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-delivery-info-url-3 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_delivery_url) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-delivery-info-url are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_delivery_url_3) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-delivery-info-url-3 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_delivery_url_4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-delivery-info-url-4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_package_entry) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 && validate_mmt_si_plt_package_entry_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_package_entry_id8) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-id8 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6 &&
+            validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6_nz && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6-nz requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6_nz && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6-nz and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 && validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+            !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+            validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+            validate_mmt_si_plt_package_entry_ipv6_nz) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv6-nz are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6 && !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6 && validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 && validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+            validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+            !validate_mmt_si_plt_body) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 requires "
+                "--validate-mmt-si-plt-table-body");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6 &&
+            validate_mmt_si_plt_body_prefix) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 and "
+                "--validate-mmt-si-plt-table-body-prefix are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_3 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-3 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 &&
+            validate_mmt_si_plt_package_entry_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv4) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 &&
+            validate_mmt_si_plt_package_entry_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_delivery_url_4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-delivery-info-url-4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv4_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv4-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_id8_location_ipv6_nz &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6-nz and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        if (validate_mmt_si_plt_package_entry_ipv6 &&
+            validate_mmt_si_plt_package_entry_id8_location_ipv6) {
+            mlog.error(
+                "--validate-mmt-si-plt-package-entry-ipv6 and "
+                "--validate-mmt-si-plt-package-entry-id8-location-ipv6 are mutually exclusive");
+            co_return 2;
+        }
+        std::vector<atsc3::gw::encoder_pipeline::config::mmt_si_pa_table_header_row>
+            pa_hdr_rows;
+        if (prepend_mmt_si_pa_hdr && cfg.count("mmtp-si-pa-table-row") != 0) {
+            for (const auto& tok :
+                 cfg["mmtp-si-pa-table-row"].as<std::vector<std::string>>()) {
+                atsc3::gw::encoder_pipeline::config::mmt_si_pa_table_header_row row{};
+                if (!parse_mmtp_si_pa_table_row(tok, &row)) {
+                    mlog.error(
+                        "invalid --mmtp-si-pa-table-row (want ID:VERSION:LENGTH per token)");
+                    co_return 2;
+                }
+                pa_hdr_rows.push_back(row);
+            }
+        }
         std::vector<std::vector<std::byte>> mmtp_sig_agg_bodies;
         std::vector<std::vector<std::byte>> mmtp_iso_agg_bodies;
+        std::vector<std::byte> mmtp_ext_value_legacy;
         if (prepend_mmtp_ext && cfg.count("mmtp-extension") == 0) {
             if (!parse_even_hex_bytes(mmtp_ext_hex, &mmtp_ext_value_legacy)) {
                 mlog.error(
@@ -602,6 +3432,90 @@ int main(int argc, char** argv) {
                     mmtp_sig_dec, std::move(enc_cfg));
                 enc_cfg.mmtp_signalling_aggregate_bodies =
                     std::move(mmtp_sig_agg_bodies);
+                enc_cfg.prepend_mmt_si_length32_envelope = prepend_mmt_si_len32;
+                enc_cfg.prepend_mmt_si_descriptor_loop_u32 = prepend_mmt_si_desc_u32;
+                enc_cfg.prepend_mmt_si_message_header_len32 = prepend_mmt_si_msg_hdr;
+                enc_cfg.mmt_si_message_id =
+                    static_cast<std::uint16_t>(mmtp_si_msg_id_in);
+                enc_cfg.mmt_si_message_version =
+                    static_cast<std::uint8_t>(mmtp_si_msg_ver_in);
+                enc_cfg.prepend_mmt_si_pa_table_headers = prepend_mmt_si_pa_hdr;
+                enc_cfg.mmt_si_pa_table_header_rows   = std::move(pa_hdr_rows);
+                enc_cfg.validate_mmt_si_mpt_table_body = validate_mmt_si_mpt_body;
+                enc_cfg.validate_mmt_si_plt_table_body = validate_mmt_si_plt_body;
+                enc_cfg.validate_mmt_si_mpt_table_body_prefix =
+                    validate_mmt_si_mpt_body_prefix;
+                enc_cfg.validate_mmt_si_mpt_asset = validate_mmt_si_mpt_asset;
+                enc_cfg.validate_mmt_si_mpt_asset_descriptors4 =
+                    validate_mmt_si_mpt_asset_descriptors4;
+                enc_cfg.validate_mmt_si_mpt_asset_id8 = validate_mmt_si_mpt_asset_id8;
+                enc_cfg.validate_mmt_si_mpt_asset_id16 = validate_mmt_si_mpt_asset_id16;
+                enc_cfg.validate_mmt_si_mpt_asset_location0 =
+                    validate_mmt_si_mpt_asset_location0;
+                enc_cfg.validate_mmt_si_mpt_asset_location_ipv4 =
+                    validate_mmt_si_mpt_asset_location_ipv4;
+                enc_cfg.validate_mmt_si_mpt_asset_location_ipv4_nz =
+                    validate_mmt_si_mpt_asset_location_ipv4_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_location_ipv6 =
+                    validate_mmt_si_mpt_asset_location_ipv6;
+                enc_cfg.validate_mmt_si_mpt_asset_location_ipv6_nz =
+                    validate_mmt_si_mpt_asset_location_ipv6_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 =
+                    validate_mmt_si_mpt_asset_id8_location_ipv4;
+                enc_cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz =
+                    validate_mmt_si_mpt_asset_id8_location_ipv4_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6 =
+                    validate_mmt_si_mpt_asset_id8_location_ipv6;
+                enc_cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz =
+                    validate_mmt_si_mpt_asset_id8_location_ipv6_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 =
+                    validate_mmt_si_mpt_asset_id16_location_ipv4;
+                enc_cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz =
+                    validate_mmt_si_mpt_asset_id16_location_ipv4_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 =
+                    validate_mmt_si_mpt_asset_id16_location_ipv6;
+                enc_cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz =
+                    validate_mmt_si_mpt_asset_id16_location_ipv6_nz;
+                enc_cfg.validate_mmt_si_mpt_asset_id16_descriptors4 =
+                    validate_mmt_si_mpt_asset_id16_descriptors4;
+                enc_cfg.validate_mmt_si_mpt_asset_id8_descriptors4 =
+                    validate_mmt_si_mpt_asset_id8_descriptors4;
+                enc_cfg.validate_mmt_si_plt_table_body_prefix =
+                    validate_mmt_si_plt_body_prefix;
+                enc_cfg.validate_mmt_si_plt_delivery_info =
+                    validate_mmt_si_plt_delivery;
+                enc_cfg.validate_mmt_si_plt_delivery_info_ipv4 =
+                    validate_mmt_si_plt_delivery_ipv4;
+                enc_cfg.validate_mmt_si_plt_delivery_info_ipv6 =
+                    validate_mmt_si_plt_delivery_ipv6;
+                enc_cfg.validate_mmt_si_plt_delivery_info_url =
+                    validate_mmt_si_plt_delivery_url;
+                enc_cfg.validate_mmt_si_plt_delivery_info_url_3 =
+                    validate_mmt_si_plt_delivery_url_3;
+                enc_cfg.validate_mmt_si_plt_delivery_info_url_4 =
+                    validate_mmt_si_plt_delivery_url_4;
+                enc_cfg.validate_mmt_si_plt_delivery_info_ipv4_nz =
+                    validate_mmt_si_plt_delivery_ipv4_nz;
+                enc_cfg.validate_mmt_si_plt_package_entry =
+                    validate_mmt_si_plt_package_entry;
+                enc_cfg.validate_mmt_si_plt_package_entry_id8 =
+                    validate_mmt_si_plt_package_entry_id8;
+                enc_cfg.validate_mmt_si_plt_package_entry_ipv4 =
+                    validate_mmt_si_plt_package_entry_ipv4;
+                enc_cfg.validate_mmt_si_plt_package_entry_ipv4_nz =
+                    validate_mmt_si_plt_package_entry_ipv4_nz;
+                enc_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 =
+                    validate_mmt_si_plt_package_entry_id8_location_ipv4;
+                enc_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz =
+                    validate_mmt_si_plt_package_entry_id8_location_ipv4_nz;
+                enc_cfg.validate_mmt_si_plt_package_entry_ipv6 =
+                    validate_mmt_si_plt_package_entry_ipv6;
+                enc_cfg.validate_mmt_si_plt_package_entry_ipv6_nz =
+                    validate_mmt_si_plt_package_entry_ipv6_nz;
+                enc_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 =
+                    validate_mmt_si_plt_package_entry_id8_location_ipv6;
+                enc_cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz =
+                    validate_mmt_si_plt_package_entry_id8_location_ipv6_nz;
             } else if (prepend_mmtp_isobmff) {
                 atsc3::mmtp_payload_isobmff_prefix::decoded_t iso_dec{};
                 iso_dec.fragment_type = static_cast<std::uint8_t>(mmtp_iso_ft);
@@ -629,8 +3543,23 @@ int main(int argc, char** argv) {
                     static_cast<std::uint8_t>(mmtp_iso_du_priority);
                 enc_cfg.mmtp_isobmff_du_header_timed.dependency_counter =
                     static_cast<std::uint8_t>(mmtp_iso_du_dep_counter);
+            } else if (prepend_mmtp_gfd) {
+                atsc3::mmtp_payload_gfd_header::decoded_t gfd_dec{};
+                gfd_dec.session_last_packet_flag  = mmtp_gfd_session_last;
+                gfd_dec.object_last_packet_flag   = mmtp_gfd_obj_last_pkt;
+                gfd_dec.object_last_byte_flag     = mmtp_gfd_obj_last_byte;
+                gfd_dec.code_point =
+                    static_cast<std::uint8_t>(mmtp_gfd_code_point);
+                gfd_dec.reserved =
+                    static_cast<std::uint8_t>(mmtp_gfd_reserved);
+                gfd_dec.transport_object_identifier = mmtp_gfd_toi;
+                gfd_dec.start_offset                = mmtp_gfd_start_offset;
+                enc_cfg = atsc3::gw::with_prepended_lab_mmtp_gfd_header(
+                    gfd_dec, std::move(enc_cfg));
             }
         }
+        enc_cfg.alp_payload_config = alp_pc;
+        enc_cfg.alp_header_mode    = alp_hm;
 
         atsc3::gw::gw_config gcfg{
             .ingress_addr = seastar::ipv4_addr(cfg["ingress"].as<std::string>()),
@@ -688,7 +3617,8 @@ int main(int argc, char** argv) {
         }
 
         mlog.info(
-            "atsc3_gw ready: ingress={} sink={} prepend_mmtp_word0={} "
+            "atsc3_gw ready: ingress={} sink={} alp_payload_config={} "
+            "alp_header_mode={} prepend_mmtp_word0={} "
             "mmtp_payload_type={} mmtp_packet_id={} prepend_mmtp_ts_psn={} "
             "mmtp_timestamp={} mmtp_psn={} prepend_mmtp_packet_counter={} "
             "mmtp_packet_counter={} mmtp_extension_tlvs={} "
@@ -702,11 +3632,16 @@ int main(int argc, char** argv) {
             "mmtp_iso_du_mf_seq={} mmtp_iso_du_sample={} mmtp_iso_du_offset={} "
             "mmtp_iso_du_priority={} mmtp_iso_du_dep_counter={} "
             "mmtp_isobmff_aggregate_segments={} "
+            "prepend_mmtp_gfd_header={} mmtp_gfd_c={} mmtp_gfd_l={} mmtp_gfd_b={} "
+            "mmtp_gfd_code_point={} mmtp_gfd_reserved={} mmtp_gfd_toi={} "
+            "mmtp_gfd_start_offset={} "
             "prepend_lct_word0={} "
             "lct_codepoint={} lct_include_tsi={} lct_tsi={} lct_include_toi={} "
             "lct_toi={} admin_http={} services_state={} smp={}",
             gcfg.ingress_addr,
             gcfg.sink_uri,
+            gcfg.encoder.alp_payload_config ? "yes" : "no",
+            gcfg.encoder.alp_header_mode ? "yes" : "no",
             prepend_mmtp ? "yes" : "no",
             static_cast<unsigned>(gcfg.encoder.mmtp_word0.payload_type),
             static_cast<unsigned>(gcfg.encoder.mmtp_word0.packet_id),
@@ -756,6 +3691,14 @@ int main(int argc, char** argv) {
                 gcfg.encoder.mmtp_isobmff_du_header_timed.dependency_counter),
             static_cast<unsigned>(
                 gcfg.encoder.mmtp_isobmff_aggregate_bodies.size()),
+            gcfg.encoder.prepend_mmtp_gfd_header ? "yes" : "no",
+            gcfg.encoder.mmtp_gfd_header.session_last_packet_flag ? "yes" : "no",
+            gcfg.encoder.mmtp_gfd_header.object_last_packet_flag ? "yes" : "no",
+            gcfg.encoder.mmtp_gfd_header.object_last_byte_flag ? "yes" : "no",
+            static_cast<unsigned>(gcfg.encoder.mmtp_gfd_header.code_point),
+            static_cast<unsigned>(gcfg.encoder.mmtp_gfd_header.reserved),
+            gcfg.encoder.mmtp_gfd_header.transport_object_identifier,
+            gcfg.encoder.mmtp_gfd_header.start_offset,
             prepend_lct ? "yes" : "no",
             static_cast<unsigned>(gcfg.encoder.lct_word0.codepoint),
             prepend_lct && gcfg.encoder.lct_word0.tsi_flag ? "yes" : "no",

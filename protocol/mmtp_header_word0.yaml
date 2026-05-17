@@ -18,7 +18,16 @@
 # When **payload_type** is **0x01** (generic object / GFD), use **`mmtp_payload_gfd_header.yaml`**.
 # When **payload_type** is **0x02** (signalling message mode), the payload begins with
 # **`mmtp_payload_signalling_prefix.yaml`** (**ISO/IEC 23008-1** **9.3.4**), then
-# signalling data (and optional aggregated lengths — see that YAML).
+# signalling data (and optional aggregated lengths — see that YAML). **MMT-SI**
+# consumption messages (**PA** / **MPI** / **MPT**, **§10.3**) are opaque bodies on that path;
+# lab codecs **`mmt_si_message_header_len32`** (**§10.3** message-prefix: **message_id** +
+# **message_version** + **BE32** **message_byte_length** + body), **`mmt_si_pa_table_headers`**
+# (**§10.3** **PA** table index: **number_of_tables** + **table_headers_byte_length** + header rows),
+# **`mmt_si_length32_envelope`**
+# (**§10.2**-style), and **`mmt_si_descriptor_loop_u32`**
+# (**§10.3** table-region, **A/331** **mmtp_desc** loop with **32**-bit length) may wrap those bodies
+# (**message header** is **outermost** in the **`gw`** lab when combined with the other SI layers).
+# Deployments often demux SI by **`packet_id`** (lab: **`scripts/mmtp_word0_integration_test.sh`** phases **V**–**ZJ**).
 # Other **payload_type** values use different payload headers (future YAML).
 #
 # Bit order: MSB-first within each octet (bit_offset 0 = MSB of byte 0).

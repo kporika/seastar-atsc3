@@ -1,0 +1,35 @@
+# MMT-SI — **MMT Package Table** fixed body prefix (inside **`mmt_si_mpt_table`** **`table_length`** region).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** / DumpTS **`MMTPackageTable::Unpack`** after
+# **`Table::Unpack`**: **reserved** (**6**) + **MPT_mode** (**2**), **MMT_package_id_length**,
+# **MPT_descriptors_length** (**BE16**), **number_of_assets**, then variable **MMT_package_id**,
+# descriptor octets, and **Asset** records. This YAML is the **5-byte minimal prefix** lab unit
+# (**package_id_length** **0**, **descriptors_length** **0**, **number_of_assets** **0**).
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_mpt_table_body_prefix
+  proto_id: 24
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 MPT table body prefix lab)"
+  description: "reserved+MPT_mode + package_id_length + desc_length + num_assets (5 B)"
+
+header:
+  total_bits: 40
+  fields:
+    - { name: reserved, bit_offset: 0, bit_width: 6, type: uint }
+    - { name: MPT_mode, bit_offset: 6, bit_width: 2, type: uint }
+    - { name: MMT_package_id_length, bit_offset: 8, bit_width: 8, type: uint }
+    - { name: MPT_descriptors_length, bit_offset: 16, bit_width: 16, type: uint }
+    - { name: number_of_assets, bit_offset: 32, bit_width: 8, type: uint }
+
+fixtures:
+  - name: minimal_empty
+    description: "MPT_mode 0, no package id, no descriptors, zero assets"
+    raw_hex: "00 00 00 00 00"
+    expected:
+      reserved: 0
+      MPT_mode: 0
+      MMT_package_id_length: 0
+      MPT_descriptors_length: 0
+      number_of_assets: 0

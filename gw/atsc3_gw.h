@@ -121,6 +121,15 @@ public:
         return _enc.encoder_config().lct_transport_object_identifier;
     }
 
+    /// **A/330** §5.2 ALP base header **payload_configuration** (**pc**); lab encoder path.
+    bool encoder_alp_payload_config() const noexcept {
+        return _enc.encoder_config().alp_payload_config;
+    }
+    /// **A/330** §5.2 ALP base header **header_mode** (**hm**); lab encoder path.
+    bool encoder_alp_header_mode() const noexcept {
+        return _enc.encoder_config().alp_header_mode;
+    }
+
     /// True when MMTP packet header word‑0 is prepended before optional LCT (M8 lab).
     bool encoder_prepends_mmtp_word0() const noexcept {
         return _enc.encoder_config().prepend_mmtp_header_word0;
@@ -176,6 +185,27 @@ public:
     encoder_mmtp_signalling_aggregate_bodies() const noexcept {
         return _enc.encoder_config().mmtp_signalling_aggregate_bodies;
     }
+    bool encoder_prepends_mmt_si_length32_envelope() const noexcept {
+        return _enc.encoder_config().prepend_mmt_si_length32_envelope;
+    }
+    bool encoder_prepends_mmt_si_descriptor_loop_u32() const noexcept {
+        return _enc.encoder_config().prepend_mmt_si_descriptor_loop_u32;
+    }
+    bool encoder_prepends_mmt_si_message_header_len32() const noexcept {
+        return _enc.encoder_config().prepend_mmt_si_message_header_len32;
+    }
+    std::uint16_t encoder_mmt_si_message_id() const noexcept {
+        return _enc.encoder_config().mmt_si_message_id;
+    }
+    std::uint8_t encoder_mmt_si_message_version() const noexcept {
+        return _enc.encoder_config().mmt_si_message_version;
+    }
+    bool encoder_prepends_mmt_si_pa_table_headers() const noexcept {
+        return _enc.encoder_config().prepend_mmt_si_pa_table_headers;
+    }
+    std::size_t encoder_mmt_si_pa_table_header_row_count() const noexcept {
+        return _enc.encoder_config().mmt_si_pa_table_header_rows.size();
+    }
 
     bool encoder_prepends_mmtp_isobmff_prefix() const noexcept {
         return _enc.encoder_config().prepend_mmtp_isobmff_prefix;
@@ -226,6 +256,31 @@ public:
     }
     std::uint8_t encoder_mmtp_isobmff_du_dependency_counter() const noexcept {
         return _enc.encoder_config().mmtp_isobmff_du_header_timed.dependency_counter;
+    }
+
+    bool encoder_prepends_mmtp_gfd_header() const noexcept {
+        return _enc.encoder_config().prepend_mmtp_gfd_header;
+    }
+    bool encoder_mmtp_gfd_session_last_packet_flag() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.session_last_packet_flag;
+    }
+    bool encoder_mmtp_gfd_object_last_packet_flag() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.object_last_packet_flag;
+    }
+    bool encoder_mmtp_gfd_object_last_byte_flag() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.object_last_byte_flag;
+    }
+    std::uint8_t encoder_mmtp_gfd_code_point() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.code_point;
+    }
+    std::uint8_t encoder_mmtp_gfd_reserved() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.reserved;
+    }
+    std::uint32_t encoder_mmtp_gfd_transport_object_identifier() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.transport_object_identifier;
+    }
+    std::uint64_t encoder_mmtp_gfd_start_offset() const noexcept {
+        return _enc.encoder_config().mmtp_gfd_header.start_offset;
     }
 
     // Admin HTTP GET/POST /services — state kept on shard 0 only.

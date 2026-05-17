@@ -1,0 +1,42 @@
+# MMT-SI — **length-prefixed message envelope** (first **32** bits **BE** = **body_byte_length**,
+# followed by exactly **body_byte_length** opaque octets).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.2** (*Signalling message format*) defines how
+# consumption/delivery signalling (e.g. **§10.3** **PA** / **MPI** / **MPT**) is carried; the exact
+# bit layout of the outermost wrapper depends on edition and URI vs binary delivery. This YAML
+# models the **minimal lab envelope** used by **`gw`** / **`mmt_probe`** to bracket ingress bytes
+# after **§9.3.4** (**`mmtp_payload_signalling_prefix`**) when **`payload_type`** is **0x02**: one
+# **BE32** length then opaque SI body. **Validate** the first-field semantics against your copy of
+# **23008-1** before treating this as a full **§10.2** bit-exact capture.
+#
+# Bit order: MSB-first within each octet (**bit_offset** **0** = MSB of byte **0**).
+
+protocol:
+  name: mmt_si_length32_envelope
+  proto_id: 17
+  spec: "ISO/IEC 23008-1 (MMT-SI signalling message lab envelope)"
+  description: "MMT-SI lab — BE32 body_byte_length + opaque body octets"
+
+header:
+  total_bits: 32
+  fields:
+    - { name: body_byte_length, bit_offset: 0, bit_width: 32, type: uint }
+
+payload:
+  length_field: body_byte_length
+  kind: opaque
+
+fixtures:
+  - name: two_byte_body
+    description: "body_byte_length=2, body DE AD"
+    raw_hex: "00 00 00 02 DE AD"
+    expected:
+      body_byte_length: 2
+      payload_hex: "DEAD"
+
+  - name: empty_body
+    description: "body_byte_length=0 (header only)"
+    raw_hex: "00 00 00 00"
+    expected:
+      body_byte_length: 0
+      payload_hex: ""

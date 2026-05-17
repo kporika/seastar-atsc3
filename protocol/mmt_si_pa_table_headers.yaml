@@ -1,0 +1,67 @@
+# MMT-SI — **PA table index** (**number_of_tables** + **table_headers_byte_length** + repeated
+# **32-bit** table header rows per **`mmt_si_table_header_word32`**).
+#
+# **Normative context:** **ISO/IEC 23008-1** **§10.3** (**PA** message): after the consumption
+# message prefix, **PA** lists **number_of_tables** (**8** bits), **table_headers_byte_length**
+# (**16** bits BE), then **`table_headers_byte_length`** octets of concatenated **4-byte** table
+# header words (**table_id**, **table_version**, **table_length** BE16 each), then table bodies
+# follow in the message body (**gw** lab **ZD**: one row, ingress = that body; **ZE**: multiple rows
+# with all **`table_length` > 0**, ingress = bodies concatenated in row order; **ZF**: mixed zero/non-zero
+# row lengths — bodies then SI tail; **ZC**: one row **`table_length` 0** — ingress is SI tail only).
+# This YAML is the
+# **index + header rows** lab unit only.
+#
+# **Invariant (lab):** **`table_headers_byte_length`** **==** **`number_of_tables` × 4`** on the
+# wire; each element is exactly **`mmt_si_table_header_word32`** (**4** B).
+#
+# Bit order: MSB-first within each octet (**bit_offset** **0** = MSB of byte **0**).
+
+protocol:
+  name: mmt_si_pa_table_headers
+  proto_id: 21
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 PA table index lab)"
+  description: "number_of_tables + BE16 table_headers_byte_length + mmt_si_table_header_word32×N"
+
+header:
+  total_bits: 24
+  fields:
+    - { name: number_of_tables, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: table_headers_byte_length, bit_offset: 8, bit_width: 16, type: uint }
+
+repeated:
+  length_field: table_headers_byte_length
+  element: mmt_si_table_header_word32
+
+fixtures:
+  - name: no_tables
+    description: "Zero tables, zero header bytes"
+    raw_hex: "00 00 00"
+    expected:
+      number_of_tables: 0
+      table_headers_byte_length: 0
+      elements: []
+
+  - name: one_mpt_row
+    description: "One table header (MPT id 0x20, version 1, length 0)"
+    raw_hex: "01 00 04 20 01 00 00"
+    expected:
+      number_of_tables: 1
+      table_headers_byte_length: 4
+      elements:
+        - table_id: 32
+          table_version: 1
+          table_length: 0
+
+  - name: two_rows
+    description: "MPT + PLT headers; byte length 8"
+    raw_hex: "02 00 08 20 01 00 00 80 00 00 0A"
+    expected:
+      number_of_tables: 2
+      table_headers_byte_length: 8
+      elements:
+        - table_id: 32
+          table_version: 1
+          table_length: 0
+        - table_id: 128
+          table_version: 0
+          table_length: 10

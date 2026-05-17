@@ -1,0 +1,61 @@
+# MMT-SI — **MMT Package Table** **Asset** with **asset_id_length** **1** and one IPv6
+# **MMT_general_location_info** with non-zero addresses (**AAN** lab).
+#
+# Same wire layout as **`mmt_si_mpt_asset_id8_location_ipv6`**; fixture uses **asset_id** **0x01**,
+# **src** **::ffff:10.0.0.1**, **dst** **::ffff:224.0.0.1**, **dst_port** **5000**.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_mpt_asset_id8_location_ipv6_nz
+  proto_id: 55
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 MPT Asset lab; id_length 1, IPv6 non-zero addrs)"
+  description: "one-byte asset id + IPv6 ::ffff:10.0.0.1:224.0.0.1:5000 (50 B)"
+
+header:
+  total_bits: 400
+  fields:
+    - { name: identifier_type, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: asset_id_scheme, bit_offset: 8, bit_width: 32, type: uint }
+    - { name: asset_id_length, bit_offset: 40, bit_width: 8, type: uint }
+    - { name: asset_id, bit_offset: 48, bit_width: 8, type: uint }
+    - { name: asset_type, bit_offset: 56, bit_width: 32, type: uint }
+    - { name: reserved, bit_offset: 88, bit_width: 7, type: uint }
+    - { name: asset_clock_relation_flag, bit_offset: 95, bit_width: 1, type: bool }
+    - { name: location_count, bit_offset: 96, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 104, bit_width: 8, type: uint }
+    - { name: ipv6_src_addr_0, bit_offset: 112, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_1, bit_offset: 144, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_2, bit_offset: 176, bit_width: 32, type: uint }
+    - { name: ipv6_src_addr_3, bit_offset: 208, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_0, bit_offset: 240, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_1, bit_offset: 272, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_2, bit_offset: 304, bit_width: 32, type: uint }
+    - { name: ipv6_dst_addr_3, bit_offset: 336, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 368, bit_width: 16, type: uint }
+    - { name: asset_descriptors_length, bit_offset: 384, bit_width: 16, type: uint }
+
+fixtures:
+  - name: lab_one_byte_id_mapped_ipv6
+    description: "asset_id 0x01, IPv6 ::ffff:10.0.0.1 -> ::ffff:224.0.0.1:5000"
+    raw_hex: "00 00 00 00 00 01 01 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 ff ff 0a 00 00 01 00 00 00 00 00 00 00 00 00 00 ff ff e0 00 00 01 13 88 00 00"
+    expected:
+      identifier_type: 0
+      asset_id_scheme: 0
+      asset_id_length: 1
+      asset_id: 1
+      asset_type: 0
+      reserved: 0
+      asset_clock_relation_flag: false
+      location_count: 1
+      location_type: 2
+      ipv6_src_addr_0: 0
+      ipv6_src_addr_1: 0
+      ipv6_src_addr_2: 65535
+      ipv6_src_addr_3: 167772161
+      ipv6_dst_addr_0: 0
+      ipv6_dst_addr_1: 0
+      ipv6_dst_addr_2: 65535
+      ipv6_dst_addr_3: 3758096385
+      dst_port: 5000
+      asset_descriptors_length: 0

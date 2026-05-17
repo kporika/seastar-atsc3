@@ -1,0 +1,46 @@
+# MMT-SI — **MMT Package Table** **Asset** with IPv4 location and non-zero addresses (**AAF** lab).
+#
+# Same wire layout as **`mmt_si_mpt_asset_location_ipv4`**; fixture uses **src** **10.0.0.1**,
+# **dst** **224.0.0.1**, **dst_port** **5000**.
+#
+# Bit order: MSB-first within each octet.
+
+protocol:
+  name: mmt_si_mpt_asset_location_ipv4_nz
+  proto_id: 47
+  spec: "ISO/IEC 23008-1 (MMT-SI §10.3 MPT Asset lab; id_length 0, IPv4 non-zero addrs)"
+  description: "zero-id asset + one IPv4 location 10.0.0.1:224.0.0.1:5000 (25 B)"
+
+header:
+  total_bits: 200
+  fields:
+    - { name: identifier_type, bit_offset: 0, bit_width: 8, type: uint }
+    - { name: asset_id_scheme, bit_offset: 8, bit_width: 32, type: uint }
+    - { name: asset_id_length, bit_offset: 40, bit_width: 8, type: uint }
+    - { name: asset_type, bit_offset: 48, bit_width: 32, type: uint }
+    - { name: reserved, bit_offset: 80, bit_width: 7, type: uint }
+    - { name: asset_clock_relation_flag, bit_offset: 87, bit_width: 1, type: bool }
+    - { name: location_count, bit_offset: 88, bit_width: 8, type: uint }
+    - { name: location_type, bit_offset: 96, bit_width: 8, type: uint }
+    - { name: ipv4_src_addr, bit_offset: 104, bit_width: 32, type: uint }
+    - { name: ipv4_dst_addr, bit_offset: 136, bit_width: 32, type: uint }
+    - { name: dst_port, bit_offset: 168, bit_width: 16, type: uint }
+    - { name: asset_descriptors_length, bit_offset: 184, bit_width: 16, type: uint }
+
+fixtures:
+  - name: lab_multicast_ipv4_location
+    description: "zero asset_id, one IPv4 location 10.0.0.1 -> 224.0.0.1:5000"
+    raw_hex: "00 00 00 00 00 00 00 00 00 00 00 01 01 0a 00 00 01 e0 00 00 01 13 88 00 00"
+    expected:
+      identifier_type: 0
+      asset_id_scheme: 0
+      asset_id_length: 0
+      asset_type: 0
+      reserved: 0
+      asset_clock_relation_flag: false
+      location_count: 1
+      location_type: 1
+      ipv4_src_addr: 167772161
+      ipv4_dst_addr: 3758096385
+      dst_port: 5000
+      asset_descriptors_length: 0
