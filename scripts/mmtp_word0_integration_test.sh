@@ -61,6 +61,91 @@
 # (**AAR**) **§10.3 MPT asset (2 B id + IPv6 non-zero addrs) lab:** **`mmt_si_mpt_asset_id16_location_ipv6_nz`** (**::ffff:10.0.0.1** → **::ffff:224.0.0.1:5000**).
 # (**AAS**) **§10.3 MPT asset (2 B id + 4 B descriptors) lab:** **`mmt_si_mpt_asset_id16_descriptors4`** (**DEADBEEF**).
 # (**AAT**) **§10.3 MPT asset (1 B id + 4 B descriptors) lab:** **`mmt_si_mpt_asset_id8_descriptors4`** (**asset_id** **0x01**, **DEADBEEF**).
+# (**AAU**) **§10.3 MPI consumption message lab:** **`mmt_si_message_header_len32`** with **message_id** **1** (**MPI**), **message_version** **0**, **packet_id** **1** (pairs with **V**–**X** routing lab **W**).
+# (**AAV**) **§10.3 MPT consumption message lab:** **`mmt_si_message_header_len32`** with **message_id** **16** (**0x10**, **MPT**), **version** **0**, **packet_id** **2**; ingress is **`mmt_si_mpt_table`** (no **PA** index).
+# (**AAW**) **§10.3 MPI + descriptor loop lab:** **AAU**-style **message_id** **1** + **`mmt_si_descriptor_loop_u32`** in the message body (**Z** payloads).
+# (**AAX**) **§10.3 MPT consumption + asset lab:** **AAV**-style **message_id** **16** + **`mmt_si_mpt_asset`** (**ZK** ingress).
+# (**AAY**) **§10.3 PLT consumption message lab:** **`mmt_si_message_header_len32`** with **message_id** **128** (**0x80**, **PLT**), **version** **0**; ingress is minimal **`mmt_si_plt_table`** (**ZH** payloads).
+# (**AAZ**) **§10.3 MPI + nested §10.2/§10.3 lab:** **AAW**-style **message_id** **1** + **`mmt_si_length32_envelope`** around **`mmt_si_descriptor_loop_u32`** (**ZA** payloads).
+# (**ABA**) **§10.3 MPT consumption + asset_id8 lab:** **AAV**/**AAX**-style **message_id** **16** + **`mmt_si_mpt_asset_id8`** (**ZS** ingress, **packet_id** **2**).
+# (**ABB**) **§10.3 PLT consumption + DeliveryInfo lab:** **AAY**-style **message_id** **128** + **`mmt_si_plt_delivery_info`** (**ZL** ingress).
+# (**ABC**) **§10.3 MPT consumption + asset_descriptors4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_descriptors4`** (**AAC** ingress, **packet_id** **2**).
+# (**ABD**) **§10.3 MPT consumption + asset_location_ipv4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_location_ipv4`** (**ZV** ingress, **packet_id** **2**).
+# (**ABE**) **§10.3 PLT consumption + package_entry lab:** **message_id** **128** + **`mmt_si_plt_package_entry`** (**ZP** ingress).
+# (**ABF**) **§10.3 MPT consumption + asset_id8_descriptors4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id8_descriptors4`** (**AAT** ingress, **packet_id** **2**).
+# (**ABG**) **§10.3 PLT consumption + DeliveryInfo IPv4 lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_ipv4`** (**ZM** ingress).
+# (**ABH**) **§10.3 PLT consumption + package_entry_id8 lab:** **message_id** **128** + **`mmt_si_plt_package_entry_id8`** (**ZR** ingress).
+# (**ABI**) **§10.3 PLT consumption + DeliveryInfo IPv6 lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_ipv6`** (**ZN** ingress).
+# (**ABJ**) **§10.3 MPT consumption + asset_location_ipv6 lab:** **message_id** **16** + **`mmt_si_mpt_asset_location_ipv6`** (**ZY** ingress, **packet_id** **2**).
+# (**ABK**) **§10.3 PLT consumption + package_entry_ipv4 lab:** **message_id** **128** + **`mmt_si_plt_package_entry_ipv4`** (**ZU** ingress).
+# (**ABL**) **§10.3 MPT consumption + asset_id16 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16`** (**AAG** ingress, **packet_id** **2**).
+# (**ABM**) **§10.3 PLT consumption + DeliveryInfo URL lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_url`** (**ZO** ingress).
+# (**ABN**) **§10.3 PLT consumption + package_entry_ipv6 lab:** **message_id** **128** + **`mmt_si_plt_package_entry_ipv6`** (**ZZ** ingress).
+# (**ABO**) **§10.3 PLT consumption + DeliveryInfo URL-4 lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_url_4`** (**AAD** ingress).
+# (**ABP**) **§10.3 PLT consumption + DeliveryInfo IPv4 non-zero lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_ipv4_nz`** (**AAE** ingress).
+# (**ABQ**) **§10.3 MPT consumption + asset_location_ipv4_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_location_ipv4_nz`** (**AAF** ingress, **packet_id** **2**).
+# (**ABR**) **§10.3 PLT consumption + DeliveryInfo URL-3 lab:** **message_id** **128** + **`mmt_si_plt_delivery_info_url_3`** (**ZQ** ingress).
+# (**ABS**) **§10.3 PLT consumption + package_entry_ipv4_nz lab:** **message_id** **128** + **`mmt_si_plt_package_entry_ipv4_nz`** (**AAI** ingress).
+# (**ABT**) **§10.3 PLT consumption + package_entry_ipv6_nz lab:** **message_id** **128** + **`mmt_si_plt_package_entry_ipv6_nz`** (**AAJ** ingress).
+# (**ABU**) **§10.3 consumption + mpt_asset_location0 lab:** **message_id** **16** + **`mmt_si_mpt_asset_location0`** (**ZT** ingress, **packet_id** **2**).
+# (**ABV**) **§10.3 consumption + mpt_asset_id8_location_ipv4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id8_location_ipv4`** (**ZW** ingress, **packet_id** **2**).
+# (**ABW**) **§10.3 consumption + plt_package_entry_id8_location_ipv4 lab:** **message_id** **128** + **`mmt_si_plt_package_entry_id8_location_ipv4`** (**ZX** ingress).
+# (**ABX**) **§10.3 consumption + mpt_asset_id8_location_ipv6 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id8_location_ipv6`** (**AAA** ingress, **packet_id** **2**).
+# (**ABY**) **§10.3 consumption + plt_package_entry_id8_location_ipv6 lab:** **message_id** **128** + **`mmt_si_plt_package_entry_id8_location_ipv6`** (**AAB** ingress).
+# (**ABZ**) **§10.3 consumption + mpt_asset_location_ipv6_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_location_ipv6_nz`** (**AAH** ingress, **packet_id** **2**).
+# (**ACA**) **§10.3 consumption + plt_package_entry_id8_location_ipv4_nz lab:** **message_id** **128** + **`mmt_si_plt_package_entry_id8_location_ipv4_nz`** (**AAK** ingress).
+# (**ACB**) **§10.3 consumption + plt_package_entry_id8_location_ipv6_nz lab:** **message_id** **128** + **`mmt_si_plt_package_entry_id8_location_ipv6_nz`** (**AAL** ingress).
+# (**ACC**) **§10.3 consumption + mpt_asset_id8_location_ipv4_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_id8_location_ipv4_nz`** (**AAM** ingress, **packet_id** **2**).
+# (**ACD**) **§10.3 consumption + mpt_asset_id8_location_ipv6_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_id8_location_ipv6_nz`** (**AAN** ingress, **packet_id** **2**).
+# (**ACE**) **§10.3 consumption + mpt_asset_id16_location_ipv4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16_location_ipv4`** (**AAO** ingress, **packet_id** **2**).
+# (**ACF**) **§10.3 consumption + mpt_asset_id16_location_ipv4_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16_location_ipv4_nz`** (**AAP** ingress, **packet_id** **2**).
+# (**ACG**) **§10.3 consumption + mpt_asset_id16_location_ipv6 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16_location_ipv6`** (**AAQ** ingress, **packet_id** **2**).
+# (**ACH**) **§10.3 consumption + mpt_asset_id16_location_ipv6_nz lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16_location_ipv6_nz`** (**AAR** ingress, **packet_id** **2**).
+# (**ACI**) **§10.3 consumption + mpt_asset_id16_descriptors4 lab:** **message_id** **16** + **`mmt_si_mpt_asset_id16_descriptors4`** (**AAS** ingress, **packet_id** **2**).
+# (**ACJ**) **§10.3 consumption + PA table index (SI tail) lab:** **message_id** **0** + **`mmt_si_pa_table_headers`** inside message body (**ZC** ingress).
+# (**ACK**) **§10.3 consumption + PA table body lab:** **message_id** **0** + PA index + table body (**ZD** ingress).
+# (**ACL**) **§10.3 consumption + PA multi-table bodies lab:** **message_id** **0** + PA index + concatenated bodies (**ZE** ingress).
+# (**ACM**) **§10.3 consumption + PA mixed body + SI tail lab:** **message_id** **0** + PA index + body + tail (**ZF** ingress).
+# (**ACN**) **§10.3 consumption + PA + mmt_si_mpt_table body lab:** **message_id** **0** + PA index + MPT table (**ZG** ingress).
+# (**ACO**) **§10.3 consumption + PA + mmt_si_plt_table body lab:** **message_id** **0** + PA index + PLT table (**ZH** ingress).
+# (**ACP**) **§10.3 consumption + PA + mmt_si_mpt_table_body_prefix lab:** **message_id** **0** (**ZI** ingress).
+# (**ACQ**) **§10.3 consumption + PA + mmt_si_plt_table_body_prefix lab:** **message_id** **0** (**ZJ** ingress).
+# (**ACR**) **§10.3 consumption + PA + mmt_si_mpt_asset lab:** **message_id** **0** (**ZK** ingress).
+# (**ACS**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8 lab:** **message_id** **0** (**ZS** ingress).
+# (**ACT**) **§10.3 consumption + PA + mmt_si_mpt_asset_descriptors4 lab:** **message_id** **0** (**AAC** ingress).
+# (**ACU**) **§10.3 consumption + PA + mmt_si_mpt_asset_location0 lab:** **message_id** **0** (**ZT** ingress).
+# (**ACV**) **§10.3 consumption + PA + mmt_si_mpt_asset_location_ipv4 lab:** **message_id** **0** (**ZV** ingress).
+# (**ACW**) **§10.3 consumption + PA + mmt_si_mpt_asset_location_ipv6 lab:** **message_id** **0** (**ZY** ingress).
+# (**ACX**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16 lab:** **message_id** **0** (**AAG** ingress).
+# (**ACY**) **§10.3 consumption + PA + mmt_si_mpt_asset_location_ipv4_nz lab:** **message_id** **0** (**AAF** ingress).
+# (**ACZ**) **§10.3 consumption + PA + mmt_si_plt_delivery_info lab:** **message_id** **0** (**ZL** ingress).
+# (**ADA**) **§10.3 consumption + PA + mmt_si_plt_package_entry lab:** **message_id** **0** (**ZP** ingress).
+# (**ADB**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_ipv4 lab:** **message_id** **0** (**ZM** ingress).
+# (**ADC**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_ipv6 lab:** **message_id** **0** (**ZN** ingress).
+# (**ADD**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_url lab:** **message_id** **0** (**ZO** ingress).
+# (**ADE**) **§10.3 consumption + PA + mmt_si_plt_package_entry_id8 lab:** **message_id** **0** (**ZR** ingress).
+# (**ADF**) **§10.3 consumption + PA + mmt_si_plt_package_entry_ipv4 lab:** **message_id** **0** (**ZU** ingress).
+# (**ADG**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_ipv4_nz lab:** **message_id** **0** (**AAE** ingress).
+# (**ADH**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_url_3 lab:** **message_id** **0** (**ZQ** ingress).
+# (**ADI**) **§10.3 consumption + PA + mmt_si_plt_package_entry_id8_location_ipv4 lab:** **message_id** **0** (**ZX** ingress).
+# (**ADJ**) **§10.3 consumption + PA + mmt_si_plt_package_entry_ipv6 lab:** **message_id** **0** (**ZZ** ingress).
+# (**ADK**) **§10.3 consumption + PA + mmt_si_plt_package_entry_id8_location_ipv6 lab:** **message_id** **0** (**AAB** ingress).
+# (**ADL**) **§10.3 consumption + PA + mmt_si_plt_delivery_info_url_4 lab:** **message_id** **0** (**AAD** ingress).
+# (**ADM**) **§10.3 consumption + PA + mmt_si_plt_package_entry_ipv4_nz lab:** **message_id** **0** (**AAI** ingress).
+# (**ADN**) **§10.3 consumption + PA + mmt_si_plt_package_entry_id8_location_ipv4_nz lab:** **message_id** **0** (**AAK** ingress).
+# (**ADO**) **§10.3 consumption + PA + mmt_si_plt_package_entry_id8_location_ipv6_nz lab:** **message_id** **0** (**AAL** ingress).
+# (**ADP**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8_location_ipv4 lab:** **message_id** **0** (**ZW** ingress).
+# (**ADQ**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8_location_ipv6 lab:** **message_id** **0** (**AAA** ingress).
+# (**ADR**) **§10.3 consumption + PA + mmt_si_mpt_asset_location_ipv6_nz lab:** **message_id** **0** (**AAH** ingress).
+# (**ADS**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8_location_ipv4_nz lab:** **message_id** **0** (**AAM** ingress).
+# (**ADT**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8_location_ipv6_nz lab:** **message_id** **0** (**AAN** ingress).
+# (**ADU**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16_location_ipv4 lab:** **message_id** **0** (**AAO** ingress).
+# (**ADV**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16_location_ipv4_nz lab:** **message_id** **0** (**AAP** ingress).
+# (**ADW**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16_location_ipv6 lab:** **message_id** **0** (**AAQ** ingress).
+# (**ADX**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16_location_ipv6_nz lab:** **message_id** **0** (**AAR** ingress).
+# (**ADY**) **§10.3 consumption + PA + mmt_si_mpt_asset_id16_descriptors4 lab:** **message_id** **0** (**AAS** ingress).
+# (**ADZ**) **§10.3 consumption + PA + mmt_si_mpt_asset_id8_descriptors4 lab:** **message_id** **0** (**AAT** ingress).
+# (**AEA**) **§10.3 consumption + PA + mmt_si_plt_package_entry_ipv6_nz lab:** **message_id** **0** (**AAJ** ingress).
 # (**AAE**) **§10.3 PLT DeliveryInfo IPv4 (non-zero addrs) lab:** **ZM**-style ingress with **`mmt_si_plt_delivery_info_ipv4_nz`** (**10.0.0.1** → **224.0.0.1:5000**).
 #
 # Usage:
@@ -226,6 +311,91 @@ port_aaq=$(( ( RANDOM % 10000 ) + 613000 ))
 port_aar=$(( ( RANDOM % 10000 ) + 623000 ))
 port_aas=$(( ( RANDOM % 10000 ) + 633000 ))
 port_aat=$(( ( RANDOM % 10000 ) + 643000 ))
+port_aau=$(( ( RANDOM % 10000 ) + 653000 ))
+port_aav=$(( ( RANDOM % 10000 ) + 654000 ))
+port_aaw=$(( ( RANDOM % 10000 ) + 655000 ))
+port_aax=$(( ( RANDOM % 10000 ) + 656000 ))
+port_aay=$(( ( RANDOM % 10000 ) + 657000 ))
+port_aaz=$(( ( RANDOM % 10000 ) + 658000 ))
+port_aba=$(( ( RANDOM % 10000 ) + 659000 ))
+port_abb=$(( ( RANDOM % 10000 ) + 660000 ))
+port_abc=$(( ( RANDOM % 10000 ) + 661000 ))
+port_abd=$(( ( RANDOM % 10000 ) + 662000 ))
+port_abe=$(( ( RANDOM % 10000 ) + 663000 ))
+port_abf=$(( ( RANDOM % 10000 ) + 664000 ))
+port_abg=$(( ( RANDOM % 10000 ) + 665000 ))
+port_abh=$(( ( RANDOM % 10000 ) + 666000 ))
+port_abi=$(( ( RANDOM % 10000 ) + 667000 ))
+port_abj=$(( ( RANDOM % 10000 ) + 668000 ))
+port_abk=$(( ( RANDOM % 10000 ) + 669000 ))
+port_abl=$(( ( RANDOM % 10000 ) + 670000 ))
+port_abm=$(( ( RANDOM % 10000 ) + 671000 ))
+port_abn=$(( ( RANDOM % 10000 ) + 672000 ))
+port_abo=$(( ( RANDOM % 10000 ) + 673000 ))
+port_abp=$(( ( RANDOM % 10000 ) + 674000 ))
+port_abq=$(( ( RANDOM % 10000 ) + 675000 ))
+port_abr=$(( ( RANDOM % 10000 ) + 676000 ))
+port_abs=$(( ( RANDOM % 10000 ) + 677000 ))
+port_abt=$(( ( RANDOM % 10000 ) + 678000 ))
+port_abu=$(( ( RANDOM % 10000 ) + 679000 ))
+port_abv=$(( ( RANDOM % 10000 ) + 680000 ))
+port_abw=$(( ( RANDOM % 10000 ) + 681000 ))
+port_abx=$(( ( RANDOM % 10000 ) + 682000 ))
+port_aby=$(( ( RANDOM % 10000 ) + 683000 ))
+port_abz=$(( ( RANDOM % 10000 ) + 684000 ))
+port_aca=$(( ( RANDOM % 10000 ) + 685000 ))
+port_acb=$(( ( RANDOM % 10000 ) + 686000 ))
+port_acc=$(( ( RANDOM % 10000 ) + 687000 ))
+port_acd=$(( ( RANDOM % 10000 ) + 688000 ))
+port_ace=$(( ( RANDOM % 10000 ) + 689000 ))
+port_acf=$(( ( RANDOM % 10000 ) + 690000 ))
+port_acg=$(( ( RANDOM % 10000 ) + 691000 ))
+port_ach=$(( ( RANDOM % 10000 ) + 692000 ))
+port_aci=$(( ( RANDOM % 10000 ) + 693000 ))
+port_acj=$(( ( RANDOM % 10000 ) + 694000 ))
+port_ack=$(( ( RANDOM % 10000 ) + 695000 ))
+port_acl=$(( ( RANDOM % 10000 ) + 696000 ))
+port_acm=$(( ( RANDOM % 10000 ) + 697000 ))
+port_acn=$(( ( RANDOM % 10000 ) + 698000 ))
+port_aco=$(( ( RANDOM % 10000 ) + 699000 ))
+port_acp=$(( ( RANDOM % 10000 ) + 700000 ))
+port_acq=$(( ( RANDOM % 10000 ) + 701000 ))
+port_acr=$(( ( RANDOM % 10000 ) + 702000 ))
+port_acs=$(( ( RANDOM % 10000 ) + 703000 ))
+port_act=$(( ( RANDOM % 10000 ) + 704000 ))
+port_acu=$(( ( RANDOM % 10000 ) + 705000 ))
+port_acv=$(( ( RANDOM % 10000 ) + 706000 ))
+port_acw=$(( ( RANDOM % 10000 ) + 707000 ))
+port_acx=$(( ( RANDOM % 10000 ) + 708000 ))
+port_acy=$(( ( RANDOM % 10000 ) + 709000 ))
+port_acz=$(( ( RANDOM % 10000 ) + 710000 ))
+port_ada=$(( ( RANDOM % 10000 ) + 711000 ))
+port_adb=$(( ( RANDOM % 10000 ) + 712000 ))
+port_adc=$(( ( RANDOM % 10000 ) + 713000 ))
+port_add=$(( ( RANDOM % 10000 ) + 714000 ))
+port_ade=$(( ( RANDOM % 10000 ) + 715000 ))
+port_adf=$(( ( RANDOM % 10000 ) + 716000 ))
+port_adg=$(( ( RANDOM % 10000 ) + 717000 ))
+port_adh=$(( ( RANDOM % 10000 ) + 718000 ))
+port_adi=$(( ( RANDOM % 10000 ) + 719000 ))
+port_adj=$(( ( RANDOM % 10000 ) + 720000 ))
+port_adk=$(( ( RANDOM % 10000 ) + 721000 ))
+port_adl=$(( ( RANDOM % 10000 ) + 722000 ))
+port_adm=$(( ( RANDOM % 10000 ) + 723000 ))
+port_adn=$(( ( RANDOM % 10000 ) + 724000 ))
+port_ado=$(( ( RANDOM % 10000 ) + 725000 ))
+port_adp=$(( ( RANDOM % 10000 ) + 726000 ))
+port_adq=$(( ( RANDOM % 10000 ) + 727000 ))
+port_adr=$(( ( RANDOM % 10000 ) + 728000 ))
+port_ads=$(( ( RANDOM % 10000 ) + 729000 ))
+port_adt=$(( ( RANDOM % 10000 ) + 730000 ))
+port_adu=$(( ( RANDOM % 10000 ) + 731000 ))
+port_adv=$(( ( RANDOM % 10000 ) + 732000 ))
+port_adw=$(( ( RANDOM % 10000 ) + 733000 ))
+port_adx=$(( ( RANDOM % 10000 ) + 734000 ))
+port_ady=$(( ( RANDOM % 10000 ) + 735000 ))
+port_adz=$(( ( RANDOM % 10000 ) + 736000 ))
+port_aea=$(( ( RANDOM % 10000 ) + 737000 ))
 
 mmtp_gfd_toi=$((0xDEADBEEF))
 mmtp_gfd_start=$((0x112233445566))
@@ -3929,6 +4099,6979 @@ run_phase "AAT" "${port_aat}" "${tmpdir}/aat.out" "${tmpdir}/gw_aat.log" \
     --expect-mmt-si-mpt-asset-descriptors-length 4 \
     --expected-payloads "${aat_payloads}"
 
-payloads="${saved_payloads_aat}"
+payloads="DEADBEEF,CAFEBABE,1122334455667788,$(printf 'AB%.0s' {1..32})"
+
+echo "[mmtp_word0_integ] phase AAU: MPI §10.3 mmt_si_message_header_len32 (message_id=1, version=0, packet_id=1) + mmt_probe strip"
+run_phase "AAU" "${port_aau}" "${tmpdir}/aau.out" "${tmpdir}/gw_aau.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 1 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 1 \
+    --mmtp-si-message-version 0
+"${probe_bin}" verify \
+    --file "${tmpdir}/aau.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 1 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 4 \
+    --expect-mmt-si-message-byte-length 4 \
+    --expect-mmt-si-message-byte-length 8 \
+    --expect-mmt-si-message-byte-length 32 \
+    --expected-payloads "${payloads}"
+
+aav_payloads="${zg_payloads}"
+saved_payloads_aav="${payloads}"
+payloads="${aav_payloads}"
+
+echo "[mmtp_word0_integ] phase AAV: MPT §10.3 consumption message (message_id=16, version=0, packet_id=2) + mmt_si_mpt_table body"
+run_phase "AAV" "${port_aav}" "${tmpdir}/aav.out" "${tmpdir}/gw_aav.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body
+"${probe_bin}" verify \
+    --file "${tmpdir}/aav.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expected-payloads "${aav_payloads}"
+
+payloads="${saved_payloads_aav}"
+
+aaw_payloads="${z_payloads}"
+saved_payloads_aaw="${payloads}"
+payloads="${aaw_payloads}"
+
+echo "[mmtp_word0_integ] phase AAW: MPI §10.3 consumption message (message_id=1) + mmt_si_descriptor_loop_u32 (packet_id=1)"
+run_phase "AAW" "${port_aaw}" "${tmpdir}/aaw.out" "${tmpdir}/gw_aaw.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 1 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 1 \
+    --mmtp-si-message-version 0 \
+    --prepend-mmt-si-descriptor-loop-u32
+"${probe_bin}" verify \
+    --file "${tmpdir}/aaw.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 1 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 6 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-message-byte-length 22 \
+    --expect-mmt-si-message-byte-length 6 \
+    --strip-mmt-si-descriptor-loop-u32 \
+    --expect-mmt-si-descriptor-loop-length 2 \
+    --expect-mmt-si-descriptor-loop-length 6 \
+    --expect-mmt-si-descriptor-loop-length 18 \
+    --expect-mmt-si-descriptor-loop-length 2 \
+    --expected-payloads "${aaw_payloads}"
+
+payloads="${saved_payloads_aaw}"
+
+aax_payloads="${zk_payloads}"
+saved_payloads_aax="${payloads}"
+payloads="${aax_payloads}"
+
+echo "[mmtp_word0_integ] phase AAX: MPT consumption message (message_id=16) + mmt_si_mpt_asset (ZK ingress, packet_id=2)"
+run_phase "AAX" "${port_aax}" "${tmpdir}/aax.out" "${tmpdir}/gw_aax.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset
+"${probe_bin}" verify \
+    --file "${tmpdir}/aax.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${aax_payloads}"
+
+payloads="${saved_payloads_aax}"
+
+aay_payloads="${zh_payloads}"
+saved_payloads_aay="${payloads}"
+payloads="${aay_payloads}"
+
+echo "[mmtp_word0_integ] phase AAY: PLT §10.3 consumption message (message_id=128, version=0) + mmt_si_plt_table body"
+run_phase "AAY" "${port_aay}" "${tmpdir}/aay.out" "${tmpdir}/gw_aay.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body
+"${probe_bin}" verify \
+    --file "${tmpdir}/aay.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 6 \
+    --expect-mmt-si-message-byte-length 6 \
+    --expect-mmt-si-message-byte-length 6 \
+    --expect-mmt-si-message-byte-length 6 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expected-payloads "${aay_payloads}"
+
+payloads="${saved_payloads_aay}"
+
+aaz_payloads="${z_payloads}"
+saved_payloads_aaz="${payloads}"
+payloads="${aaz_payloads}"
+
+echo "[mmtp_word0_integ] phase AAZ: MPI consumption message (message_id=1) + length32 envelope + descriptor loop (packet_id=1)"
+run_phase "AAZ" "${port_aaz}" "${tmpdir}/aaz.out" "${tmpdir}/gw_aaz.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 1 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 1 \
+    --mmtp-si-message-version 0 \
+    --prepend-mmt-si-descriptor-loop-u32 \
+    --prepend-mmt-si-length32-envelope
+"${probe_bin}" verify \
+    --file "${tmpdir}/aaz.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 1 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-id 1 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-message-byte-length 14 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 10 \
+    --strip-mmt-si-length32-envelope \
+    --expect-mmt-si-body-byte-length 6 \
+    --expect-mmt-si-body-byte-length 10 \
+    --expect-mmt-si-body-byte-length 22 \
+    --expect-mmt-si-body-byte-length 6 \
+    --strip-mmt-si-descriptor-loop-u32 \
+    --expect-mmt-si-descriptor-loop-length 2 \
+    --expect-mmt-si-descriptor-loop-length 6 \
+    --expect-mmt-si-descriptor-loop-length 18 \
+    --expect-mmt-si-descriptor-loop-length 2 \
+    --expected-payloads "${aaz_payloads}"
+
+payloads="${saved_payloads_aaz}"
+
+aba_payloads="${zs_payloads}"
+saved_payloads_aba="${payloads}"
+payloads="${aba_payloads}"
+
+echo "[mmtp_word0_integ] phase ABA: MPT consumption message (message_id=16) + mmt_si_mpt_asset_id8 (ZS ingress, packet_id=2)"
+run_phase "ABA" "${port_aba}" "${tmpdir}/aba.out" "${tmpdir}/gw_aba.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8
+"${probe_bin}" verify \
+    --file "${tmpdir}/aba.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${aba_payloads}"
+
+payloads="${saved_payloads_aba}"
+
+abb_payloads="${zl_payloads}"
+saved_payloads_abb="${payloads}"
+payloads="${abb_payloads}"
+
+echo "[mmtp_word0_integ] phase ABB: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info (ZL ingress)"
+run_phase "ABB" "${port_abb}" "${tmpdir}/abb.out" "${tmpdir}/gw_abb.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info
+"${probe_bin}" verify \
+    --file "${tmpdir}/abb.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abb_payloads}"
+
+payloads="${saved_payloads_abb}"
+
+abc_payloads="${aac_payloads}"
+saved_payloads_abc="${payloads}"
+payloads="${abc_payloads}"
+
+echo "[mmtp_word0_integ] phase ABC: MPT consumption message (message_id=16) + mmt_si_mpt_asset_descriptors4 (AAC ingress, packet_id=2)"
+run_phase "ABC" "${port_abc}" "${tmpdir}/abc.out" "${tmpdir}/gw_abc.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abc.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 27 \
+    --expect-mmt-si-message-byte-length 27 \
+    --expect-mmt-si-message-byte-length 27 \
+    --expect-mmt-si-message-byte-length 27 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expected-payloads "${abc_payloads}"
+
+payloads="${saved_payloads_abc}"
+
+abd_payloads="${zv_payloads}"
+saved_payloads_abd="${payloads}"
+payloads="${abd_payloads}"
+
+echo "[mmtp_word0_integ] phase ABD: MPT consumption message (message_id=16) + mmt_si_mpt_asset_location_ipv4 (ZV ingress, packet_id=2)"
+run_phase "ABD" "${port_abd}" "${tmpdir}/abd.out" "${tmpdir}/gw_abd.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abd.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abd_payloads}"
+
+payloads="${saved_payloads_abd}"
+
+abe_payloads="${zp_payloads}"
+saved_payloads_abe="${payloads}"
+payloads="${abe_payloads}"
+
+echo "[mmtp_word0_integ] phase ABE: PLT consumption message (message_id=128) + mmt_si_plt_package_entry (ZP ingress)"
+run_phase "ABE" "${port_abe}" "${tmpdir}/abe.out" "${tmpdir}/gw_abe.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry
+"${probe_bin}" verify \
+    --file "${tmpdir}/abe.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-message-byte-length 10 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expected-payloads "${abe_payloads}"
+
+payloads="${saved_payloads_abe}"
+
+abf_payloads="${aat_payloads}"
+saved_payloads_abf="${payloads}"
+payloads="${abf_payloads}"
+
+echo "[mmtp_word0_integ] phase ABF: MPT consumption message (message_id=16) + mmt_si_mpt_asset_id8_descriptors4 (AAT ingress, packet_id=2)"
+run_phase "ABF" "${port_abf}" "${tmpdir}/abf.out" "${tmpdir}/gw_abf.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abf.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 28 \
+    --expect-mmt-si-message-byte-length 28 \
+    --expect-mmt-si-message-byte-length 28 \
+    --expect-mmt-si-message-byte-length 28 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expected-payloads "${abf_payloads}"
+
+payloads="${saved_payloads_abf}"
+
+abg_payloads="${zm_payloads}"
+saved_payloads_abg="${payloads}"
+payloads="${abg_payloads}"
+
+echo "[mmtp_word0_integ] phase ABG: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_ipv4 (ZM ingress)"
+run_phase "ABG" "${port_abg}" "${tmpdir}/abg.out" "${tmpdir}/gw_abg.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abg.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abg_payloads}"
+
+payloads="${saved_payloads_abg}"
+
+abh_payloads="${zr_payloads}"
+saved_payloads_abh="${payloads}"
+payloads="${abh_payloads}"
+
+echo "[mmtp_word0_integ] phase ABH: PLT consumption message (message_id=128) + mmt_si_plt_package_entry_id8 (ZR ingress)"
+run_phase "ABH" "${port_abh}" "${tmpdir}/abh.out" "${tmpdir}/gw_abh.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8
+"${probe_bin}" verify \
+    --file "${tmpdir}/abh.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expected-payloads "${abh_payloads}"
+
+payloads="${saved_payloads_abh}"
+
+abi_payloads="${zn_payloads}"
+saved_payloads_abi="${payloads}"
+payloads="${abi_payloads}"
+
+echo "[mmtp_word0_integ] phase ABI: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_ipv6 (ZN ingress)"
+run_phase "ABI" "${port_abi}" "${tmpdir}/abi.out" "${tmpdir}/gw_abi.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/abi.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 47 \
+    --expect-mmt-si-message-byte-length 47 \
+    --expect-mmt-si-message-byte-length 47 \
+    --expect-mmt-si-message-byte-length 47 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abi_payloads}"
+
+payloads="${saved_payloads_abi}"
+
+abj_payloads="${zy_payloads}"
+saved_payloads_abj="${payloads}"
+payloads="${abj_payloads}"
+
+echo "[mmtp_word0_integ] phase ABJ: MPT consumption message (message_id=16) + mmt_si_mpt_asset_location_ipv6 (ZY ingress, packet_id=2)"
+run_phase "ABJ" "${port_abj}" "${tmpdir}/abj.out" "${tmpdir}/gw_abj.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/abj.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abj_payloads}"
+
+payloads="${saved_payloads_abj}"
+
+abk_payloads="${zu_payloads}"
+saved_payloads_abk="${payloads}"
+payloads="${abk_payloads}"
+
+echo "[mmtp_word0_integ] phase ABK: PLT consumption message (message_id=128) + mmt_si_plt_package_entry_ipv4 (ZU ingress)"
+run_phase "ABK" "${port_abk}" "${tmpdir}/abk.out" "${tmpdir}/gw_abk.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abk.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expected-payloads "${abk_payloads}"
+
+payloads="${saved_payloads_abk}"
+
+abl_payloads="${aag_payloads}"
+saved_payloads_abl="${payloads}"
+payloads="${abl_payloads}"
+
+echo "[mmtp_word0_integ] phase ABL: MPT consumption message (message_id=16) + mmt_si_mpt_asset_id16 (AAG ingress, packet_id=2)"
+run_phase "ABL" "${port_abl}" "${tmpdir}/abl.out" "${tmpdir}/gw_abl.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16
+"${probe_bin}" verify \
+    --file "${tmpdir}/abl.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abl_payloads}"
+
+payloads="${saved_payloads_abl}"
+
+abm_payloads="${zo_payloads}"
+saved_payloads_abm="${payloads}"
+payloads="${abm_payloads}"
+
+echo "[mmtp_word0_integ] phase ABM: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_url (ZO ingress)"
+run_phase "ABM" "${port_abm}" "${tmpdir}/abm.out" "${tmpdir}/gw_abm.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url
+"${probe_bin}" verify \
+    --file "${tmpdir}/abm.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 14 \
+    --expect-mmt-si-message-byte-length 14 \
+    --expect-mmt-si-message-byte-length 14 \
+    --expect-mmt-si-message-byte-length 14 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-url-length 0 \
+    --expect-mmt-si-plt-delivery-info-url-length 0 \
+    --expect-mmt-si-plt-delivery-info-url-length 0 \
+    --expect-mmt-si-plt-delivery-info-url-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abm_payloads}"
+
+payloads="${saved_payloads_abm}"
+
+abn_payloads="${zz_payloads}"
+saved_payloads_abn="${payloads}"
+payloads="${abn_payloads}"
+
+echo "[mmtp_word0_integ] phase ABN: PLT consumption message (message_id=128) + mmt_si_plt_package_entry_ipv6 (ZZ ingress)"
+run_phase "ABN" "${port_abn}" "${tmpdir}/abn.out" "${tmpdir}/gw_abn.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/abn.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expected-payloads "${abn_payloads}"
+
+payloads="${saved_payloads_abn}"
+
+abo_payloads="${aad_payloads}"
+saved_payloads_abo="${payloads}"
+payloads="${abo_payloads}"
+
+echo "[mmtp_word0_integ] phase ABO: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_url_4 (AAD ingress)"
+run_phase "ABO" "${port_abo}" "${tmpdir}/abo.out" "${tmpdir}/gw_abo.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url-4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abo.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abo_payloads}"
+
+payloads="${saved_payloads_abo}"
+
+abp_payloads="${aae_payloads}"
+saved_payloads_abp="${payloads}"
+payloads="${abp_payloads}"
+
+echo "[mmtp_word0_integ] phase ABP: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_ipv4_nz (AAE ingress)"
+run_phase "ABP" "${port_abp}" "${tmpdir}/abp.out" "${tmpdir}/gw_abp.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/abp.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-message-byte-length 23 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abp_payloads}"
+
+payloads="${saved_payloads_abp}"
+
+abq_payloads="${aaf_payloads}"
+saved_payloads_abq="${payloads}"
+payloads="${abq_payloads}"
+
+echo "[mmtp_word0_integ] phase ABQ: MPT consumption message (message_id=16) + mmt_si_mpt_asset_location_ipv4_nz (AAF ingress, packet_id=2)"
+run_phase "ABQ" "${port_abq}" "${tmpdir}/abq.out" "${tmpdir}/gw_abq.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/abq.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abq_payloads}"
+
+payloads="${saved_payloads_abq}"
+
+abr_payloads="${zq_payloads}"
+saved_payloads_abr="${payloads}"
+payloads="${abr_payloads}"
+
+echo "[mmtp_word0_integ] phase ABR: PLT consumption message (message_id=128) + mmt_si_plt_delivery_info_url_3 (ZQ ingress)"
+run_phase "ABR" "${port_abr}" "${tmpdir}/abr.out" "${tmpdir}/gw_abr.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url-3
+"${probe_bin}" verify \
+    --file "${tmpdir}/abr.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${abr_payloads}"
+
+payloads="${saved_payloads_abr}"
+
+abs_payloads="${aai_payloads}"
+saved_payloads_abs="${payloads}"
+payloads="${abs_payloads}"
+
+echo "[mmtp_word0_integ] phase ABS: PLT consumption message (message_id=128) + mmt_si_plt_package_entry_ipv4_nz (AAI ingress)"
+run_phase "ABS" "${port_abs}" "${tmpdir}/abs.out" "${tmpdir}/gw_abs.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/abs.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expected-payloads "${abs_payloads}"
+
+payloads="${saved_payloads_abs}"
+
+abt_payloads="${aaj_payloads}"
+saved_payloads_abt="${payloads}"
+payloads="${abt_payloads}"
+
+echo "[mmtp_word0_integ] phase ABT: PLT consumption message (message_id=128) + mmt_si_plt_package_entry_ipv6_nz (AAJ ingress)"
+run_phase "ABT" "${port_abt}" "${tmpdir}/abt.out" "${tmpdir}/gw_abt.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/abt.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expected-payloads "${abt_payloads}"
+
+payloads="${saved_payloads_abt}"
+
+abu_payloads="${zt_payloads}"
+saved_payloads_abu="${payloads}"
+payloads="${abu_payloads}"
+
+echo "[mmtp_word0_integ] phase ABU: consumption (message_id=16) + mmt_si_mpt_asset_location0 (ZT ingress)"
+run_phase "ABU" "${port_abu}" "${tmpdir}/abu.out" "${tmpdir}/gw_abu.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location0
+"${probe_bin}" verify \
+    --file "${tmpdir}/abu.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abu_payloads}"
+
+payloads="${saved_payloads_abu}"
+
+abv_payloads="${zw_payloads}"
+saved_payloads_abv="${payloads}"
+payloads="${abv_payloads}"
+
+echo "[mmtp_word0_integ] phase ABV: consumption (message_id=16) + mmt_si_mpt_asset_id8_location_ipv4 (ZW ingress)"
+run_phase "ABV" "${port_abv}" "${tmpdir}/abv.out" "${tmpdir}/gw_abv.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abv.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abv_payloads}"
+
+payloads="${saved_payloads_abv}"
+
+abw_payloads="${zx_payloads}"
+saved_payloads_abw="${payloads}"
+payloads="${abw_payloads}"
+
+echo "[mmtp_word0_integ] phase ABW: consumption (message_id=128) + mmt_si_plt_package_entry_id8_location_ipv4 (ZX ingress)"
+run_phase "ABW" "${port_abw}" "${tmpdir}/abw.out" "${tmpdir}/gw_abw.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/abw.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expected-payloads "${abw_payloads}"
+
+payloads="${saved_payloads_abw}"
+
+abx_payloads="${aaa_payloads}"
+saved_payloads_abx="${payloads}"
+payloads="${abx_payloads}"
+
+echo "[mmtp_word0_integ] phase ABX: consumption (message_id=16) + mmt_si_mpt_asset_id8_location_ipv6 (AAA ingress)"
+run_phase "ABX" "${port_abx}" "${tmpdir}/abx.out" "${tmpdir}/gw_abx.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/abx.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abx_payloads}"
+
+payloads="${saved_payloads_abx}"
+
+aby_payloads="${aab_payloads}"
+saved_payloads_aby="${payloads}"
+payloads="${aby_payloads}"
+
+echo "[mmtp_word0_integ] phase ABY: consumption (message_id=128) + mmt_si_plt_package_entry_id8_location_ipv6 (AAB ingress)"
+run_phase "ABY" "${port_aby}" "${tmpdir}/aby.out" "${tmpdir}/gw_aby.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/aby.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expected-payloads "${aby_payloads}"
+
+payloads="${saved_payloads_aby}"
+
+abz_payloads="${aah_payloads}"
+saved_payloads_abz="${payloads}"
+payloads="${abz_payloads}"
+
+echo "[mmtp_word0_integ] phase ABZ: consumption (message_id=16) + mmt_si_mpt_asset_location_ipv6_nz (AAH ingress)"
+run_phase "ABZ" "${port_abz}" "${tmpdir}/abz.out" "${tmpdir}/gw_abz.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/abz.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-message-byte-length 58 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${abz_payloads}"
+
+payloads="${saved_payloads_abz}"
+
+aca_payloads="${aak_payloads}"
+saved_payloads_aca="${payloads}"
+payloads="${aca_payloads}"
+
+echo "[mmtp_word0_integ] phase ACA: consumption (message_id=128) + mmt_si_plt_package_entry_id8_location_ipv4_nz (AAK ingress)"
+run_phase "ACA" "${port_aca}" "${tmpdir}/aca.out" "${tmpdir}/gw_aca.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/aca.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expected-payloads "${aca_payloads}"
+
+payloads="${saved_payloads_aca}"
+
+acb_payloads="${aal_payloads}"
+saved_payloads_acb="${payloads}"
+payloads="${acb_payloads}"
+
+echo "[mmtp_word0_integ] phase ACB: consumption (message_id=128) + mmt_si_plt_package_entry_id8_location_ipv6_nz (AAL ingress)"
+run_phase "ACB" "${port_acb}" "${tmpdir}/acb.out" "${tmpdir}/gw_acb.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 128 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/acb.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-id 128 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expected-payloads "${acb_payloads}"
+
+payloads="${saved_payloads_acb}"
+
+acc_payloads="${aam_payloads}"
+saved_payloads_acc="${payloads}"
+payloads="${acc_payloads}"
+
+echo "[mmtp_word0_integ] phase ACC: consumption (message_id=16) + mmt_si_mpt_asset_id8_location_ipv4_nz (AAM ingress)"
+run_phase "ACC" "${port_acc}" "${tmpdir}/acc.out" "${tmpdir}/gw_acc.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/acc.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${acc_payloads}"
+
+payloads="${saved_payloads_acc}"
+
+acd_payloads="${aan_payloads}"
+saved_payloads_acd="${payloads}"
+payloads="${acd_payloads}"
+
+echo "[mmtp_word0_integ] phase ACD: consumption (message_id=16) + mmt_si_mpt_asset_id8_location_ipv6_nz (AAN ingress)"
+run_phase "ACD" "${port_acd}" "${tmpdir}/acd.out" "${tmpdir}/gw_acd.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/acd.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${acd_payloads}"
+
+payloads="${saved_payloads_acd}"
+
+ace_payloads="${aao_payloads}"
+saved_payloads_ace="${payloads}"
+payloads="${ace_payloads}"
+
+echo "[mmtp_word0_integ] phase ACE: consumption (message_id=16) + mmt_si_mpt_asset_id16_location_ipv4 (AAO ingress)"
+run_phase "ACE" "${port_ace}" "${tmpdir}/ace.out" "${tmpdir}/gw_ace.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/ace.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${ace_payloads}"
+
+payloads="${saved_payloads_ace}"
+
+acf_payloads="${aap_payloads}"
+saved_payloads_acf="${payloads}"
+payloads="${acf_payloads}"
+
+echo "[mmtp_word0_integ] phase ACF: consumption (message_id=16) + mmt_si_mpt_asset_id16_location_ipv4_nz (AAP ingress)"
+run_phase "ACF" "${port_acf}" "${tmpdir}/acf.out" "${tmpdir}/gw_acf.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/acf.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${acf_payloads}"
+
+payloads="${saved_payloads_acf}"
+
+acg_payloads="${aaq_payloads}"
+saved_payloads_acg="${payloads}"
+payloads="${acg_payloads}"
+
+echo "[mmtp_word0_integ] phase ACG: consumption (message_id=16) + mmt_si_mpt_asset_id16_location_ipv6 (AAQ ingress)"
+run_phase "ACG" "${port_acg}" "${tmpdir}/acg.out" "${tmpdir}/gw_acg.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/acg.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-message-byte-length 59 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${acg_payloads}"
+
+payloads="${saved_payloads_acg}"
+
+ach_payloads="${aar_payloads}"
+saved_payloads_ach="${payloads}"
+payloads="${ach_payloads}"
+
+echo "[mmtp_word0_integ] phase ACH: consumption (message_id=16) + mmt_si_mpt_asset_id16_location_ipv6_nz (AAR ingress)"
+run_phase "ACH" "${port_ach}" "${tmpdir}/ach.out" "${tmpdir}/gw_ach.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/ach.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 60 \
+    --expect-mmt-si-message-byte-length 60 \
+    --expect-mmt-si-message-byte-length 60 \
+    --expect-mmt-si-message-byte-length 60 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${ach_payloads}"
+
+payloads="${saved_payloads_ach}"
+
+aci_payloads="${aas_payloads}"
+saved_payloads_aci="${payloads}"
+payloads="${aci_payloads}"
+
+echo "[mmtp_word0_integ] phase ACI: consumption (message_id=16) + mmt_si_mpt_asset_id16_descriptors4 (AAS ingress)"
+run_phase "ACI" "${port_aci}" "${tmpdir}/aci.out" "${tmpdir}/gw_aci.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type 2 \
+    --mmtp-packet-id 2 \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 16 \
+    --mmtp-si-message-version 0 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/aci.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type 2 \
+    --expect-mmtp-packet-id 2 \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-id 16 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-version 0 \
+    --expect-mmt-si-message-byte-length 29 \
+    --expect-mmt-si-message-byte-length 29 \
+    --expect-mmt-si-message-byte-length 29 \
+    --expect-mmt-si-message-byte-length 29 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expected-payloads "${aci_payloads}"
+
+payloads="${saved_payloads_aci}"
+
+acj_payload="010004200100000500"
+acj_payloads="${acj_payload},${acj_payload},${acj_payload},${acj_payload}"
+acj_tail="0500"
+acj_tail_payloads="${acj_tail},${acj_tail},${acj_tail},${acj_tail}"
+saved_payloads_acj="${payloads}"
+payloads="${acj_payloads}"
+
+echo "[mmtp_word0_integ] phase ACJ: consumption (message_id=0) + mmt_si_pa_table_headers + SI tail (ZC ingress)"
+run_phase "ACJ" "${port_acj}" "${tmpdir}/acj.out" "${tmpdir}/gw_acj.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1
+"${probe_bin}" verify \
+    --file "${tmpdir}/acj.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --expect-mmt-si-message-byte-length 9 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expected-payloads "${acj_tail_payloads}"
+
+payloads="${saved_payloads_acj}"
+
+ack_payload="01000420010004deadbeef"
+ack_payloads="${ack_payload},${ack_payload},${ack_payload},${ack_payload}"
+ack_body="deadbeef"
+ack_body_payloads="${ack_body},${ack_body},${ack_body},${ack_body}"
+saved_payloads_ack="${payloads}"
+payloads="${ack_payloads}"
+
+echo "[mmtp_word0_integ] phase ACK: consumption (message_id=0) + PA table body (ZD ingress)"
+run_phase "ACK" "${port_ack}" "${tmpdir}/ack.out" "${tmpdir}/gw_ack.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1
+"${probe_bin}" verify \
+    --file "${tmpdir}/ack.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --expect-mmt-si-message-byte-length 11 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expected-payloads "${ack_body_payloads}"
+
+payloads="${saved_payloads_ack}"
+
+acl_payload="0200082001000480000004deadbeefcafebabe"
+acl_payloads="${acl_payload},${acl_payload},${acl_payload},${acl_payload}"
+acl_body="deadbeefcafebabe"
+acl_body_payloads="${acl_body},${acl_body},${acl_body},${acl_body}"
+saved_payloads_acl="${payloads}"
+payloads="${acl_payloads}"
+
+echo "[mmtp_word0_integ] phase ACL: consumption (message_id=0) + PA multi-table bodies (ZE ingress)"
+run_phase "ACL" "${port_acl}" "${tmpdir}/acl.out" "${tmpdir}/gw_acl.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1
+"${probe_bin}" verify \
+    --file "${tmpdir}/acl.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --expect-mmt-si-message-byte-length 19 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expected-payloads "${acl_body_payloads}"
+
+payloads="${saved_payloads_acl}"
+
+acm_payload="0200082001000480000000deadbeef102030"
+acm_payloads="${acm_payload},${acm_payload},${acm_payload},${acm_payload}"
+acm_body="deadbeef102030"
+acm_body_payloads="${acm_body},${acm_body},${acm_body},${acm_body}"
+saved_payloads_acm="${payloads}"
+payloads="${acm_payloads}"
+
+echo "[mmtp_word0_integ] phase ACM: consumption (message_id=0) + PA mixed body + SI tail (ZF ingress)"
+run_phase "ACM" "${port_acm}" "${tmpdir}/acm.out" "${tmpdir}/gw_acm.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1
+"${probe_bin}" verify \
+    --file "${tmpdir}/acm.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expect-mmt-si-pa-number-of-tables 2 \
+    --expected-payloads "${acm_body_payloads}"
+
+payloads="${saved_payloads_acm}"
+
+acn_payload="01000420010009200100050000000000"
+acn_payloads="${acn_payload},${acn_payload},${acn_payload},${acn_payload}"
+saved_payloads_acn="${payloads}"
+payloads="${acn_payloads}"
+
+echo "[mmtp_word0_integ] phase ACN: consumption (message_id=0) + PA + mmt_si_mpt_table body (ZG ingress)"
+run_phase "ACN" "${port_acn}" "${tmpdir}/acn.out" "${tmpdir}/gw_acn.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body
+"${probe_bin}" verify \
+    --file "${tmpdir}/acn.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expected-payloads "${zg_payloads}"
+
+payloads="${saved_payloads_acn}"
+
+aco_payload="01000480000006800000020000"
+aco_payloads="${aco_payload},${aco_payload},${aco_payload},${aco_payload}"
+saved_payloads_aco="${payloads}"
+payloads="${aco_payloads}"
+
+echo "[mmtp_word0_integ] phase ACO: consumption (message_id=0) + PA + mmt_si_plt_table body (ZH ingress)"
+run_phase "ACO" "${port_aco}" "${tmpdir}/aco.out" "${tmpdir}/gw_aco.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body
+"${probe_bin}" verify \
+    --file "${tmpdir}/aco.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expected-payloads "${zh_payloads}"
+
+payloads="${saved_payloads_aco}"
+
+acp_payload="${acn_payload}"
+acp_payloads="${acp_payload},${acp_payload},${acp_payload},${acp_payload}"
+saved_payloads_acp="${payloads}"
+payloads="${acp_payloads}"
+
+echo "[mmtp_word0_integ] phase ACP: consumption (message_id=0) + PA + mmt_si_mpt_table_body_prefix (ZI ingress)"
+run_phase "ACP" "${port_acp}" "${tmpdir}/acp.out" "${tmpdir}/gw_acp.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-table-body-prefix
+"${probe_bin}" verify \
+    --file "${tmpdir}/acp.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --expect-mmt-si-message-byte-length 16 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-length 5 \
+    --expect-mmt-si-mpt-table-body-num-assets 0 \
+    --expect-mmt-si-mpt-table-body-num-assets 0 \
+    --expect-mmt-si-mpt-table-body-num-assets 0 \
+    --expect-mmt-si-mpt-table-body-num-assets 0 \
+    --expected-payloads "${zg_payloads}"
+
+payloads="${saved_payloads_acp}"
+
+acq_payload="${aco_payload}"
+acq_payloads="${acq_payload},${acq_payload},${acq_payload},${acq_payload}"
+saved_payloads_acq="${payloads}"
+payloads="${acq_payloads}"
+
+echo "[mmtp_word0_integ] phase ACQ: consumption (message_id=0) + PA + mmt_si_plt_table_body_prefix (ZJ ingress)"
+run_phase "ACQ" "${port_acq}" "${tmpdir}/acq.out" "${tmpdir}/gw_acq.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-table-body-prefix
+"${probe_bin}" verify \
+    --file "${tmpdir}/acq.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --expect-mmt-si-message-byte-length 13 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-length 2 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expected-payloads "${zh_payloads}"
+
+payloads="${saved_payloads_acq}"
+
+acr_payload="010004200100172001001300000000010000000000000000000000000000"
+acr_payloads="${acr_payload},${acr_payload},${acr_payload},${acr_payload}"
+saved_payloads_acr="${payloads}"
+payloads="${acr_payloads}"
+
+echo "[mmtp_word0_integ] phase ACR: consumption (message_id=0) + PA + MPT asset (ZK ingress)"
+run_phase "ACR" "${port_acr}" "${tmpdir}/acr.out" "${tmpdir}/gw_acr.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset
+"${probe_bin}" verify \
+    --file "${tmpdir}/acr.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-length 19 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${zk_payloads}"
+
+payloads="${saved_payloads_acr}"
+
+acs_payload="01000420010018200100140000000001000000000001010000000000000000"
+acs_payloads="${acs_payload},${acs_payload},${acs_payload},${acs_payload}"
+saved_payloads_acs="${payloads}"
+payloads="${acs_payloads}"
+
+echo "[mmtp_word0_integ] phase ACS: consumption (message_id=0) + PA + MPT asset (ZS ingress)"
+run_phase "ACS" "${port_acs}" "${tmpdir}/acs.out" "${tmpdir}/gw_acs.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8
+"${probe_bin}" verify \
+    --file "${tmpdir}/acs.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 31 \
+    --expect-mmt-si-message-byte-length 31 \
+    --expect-mmt-si-message-byte-length 31 \
+    --expect-mmt-si-message-byte-length 31 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-length 20 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expected-payloads "${zs_payloads}"
+
+payloads="${saved_payloads_acs}"
+
+act_payload="0100042001001b2001001700000000010000000000000000000000000004DEADBEEF"
+act_payloads="${act_payload},${act_payload},${act_payload},${act_payload}"
+saved_payloads_act="${payloads}"
+payloads="${act_payloads}"
+
+echo "[mmtp_word0_integ] phase ACT: consumption (message_id=0) + PA + MPT asset (AAC ingress)"
+run_phase "ACT" "${port_act}" "${tmpdir}/act.out" "${tmpdir}/gw_act.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/act.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --expect-mmt-si-message-byte-length 34 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-length 23 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expected-payloads "${aac_payloads}"
+
+payloads="${saved_payloads_act}"
+
+acu_payload="0100042001001a2001001600000000010000000000000000000000010000000000"
+acu_payloads="${acu_payload},${acu_payload},${acu_payload},${acu_payload}"
+saved_payloads_acu="${payloads}"
+payloads="${acu_payloads}"
+
+echo "[mmtp_word0_integ] phase ACU: consumption (message_id=0) + PA + MPT asset (ZT ingress)"
+run_phase "ACU" "${port_acu}" "${tmpdir}/acu.out" "${tmpdir}/gw_acu.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location0
+"${probe_bin}" verify \
+    --file "${tmpdir}/acu.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 33 \
+    --expect-mmt-si-message-byte-length 33 \
+    --expect-mmt-si-message-byte-length 33 \
+    --expect-mmt-si-message-byte-length 33 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-length 22 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-location-type 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expect-mmt-si-mpt-asset-packet-id 0 \
+    --expected-payloads "${zt_payloads}"
+
+payloads="${saved_payloads_acu}"
+
+acv_payload="010004200100222001001e000000000100000000000000000000000101000000000000000000000000"
+acv_payloads="${acv_payload},${acv_payload},${acv_payload},${acv_payload}"
+saved_payloads_acv="${payloads}"
+payloads="${acv_payloads}"
+
+echo "[mmtp_word0_integ] phase ACV: consumption (message_id=0) + PA + MPT asset (ZV ingress)"
+run_phase "ACV" "${port_acv}" "${tmpdir}/acv.out" "${tmpdir}/gw_acv.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/acv.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expected-payloads "${zv_payloads}"
+
+payloads="${saved_payloads_acv}"
+
+acw_payload="0100042001003a20010036000000000100000000000000000000000102000000000000000000000000000000000000000000000000000000000000000000000000"
+acw_payloads="${acw_payload},${acw_payload},${acw_payload},${acw_payload}"
+saved_payloads_acw="${payloads}"
+payloads="${acw_payloads}"
+
+echo "[mmtp_word0_integ] phase ACW: consumption (message_id=0) + PA + MPT asset (ZY ingress)"
+run_phase "ACW" "${port_acw}" "${tmpdir}/acw.out" "${tmpdir}/gw_acw.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/acw.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expected-payloads "${zy_payloads}"
+
+payloads="${saved_payloads_acw}"
+
+acx_payload="0100042001001920010015000000000100000000000201020000000000000000"
+acx_payloads="${acx_payload},${acx_payload},${acx_payload},${acx_payload}"
+saved_payloads_acx="${payloads}"
+payloads="${acx_payloads}"
+
+echo "[mmtp_word0_integ] phase ACX: consumption (message_id=0) + PA + MPT asset (AAG ingress)"
+run_phase "ACX" "${port_acx}" "${tmpdir}/acx.out" "${tmpdir}/gw_acx.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16
+"${probe_bin}" verify \
+    --file "${tmpdir}/acx.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 32 \
+    --expect-mmt-si-message-byte-length 32 \
+    --expect-mmt-si-message-byte-length 32 \
+    --expect-mmt-si-message-byte-length 32 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-length 21 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expected-payloads "${aag_payloads}"
+
+payloads="${saved_payloads_acx}"
+
+acy_payload="010004200100222001001e0000000001000000000000000000000001010a000001e000000113880000"
+acy_payloads="${acy_payload},${acy_payload},${acy_payload},${acy_payload}"
+saved_payloads_acy="${payloads}"
+payloads="${acy_payloads}"
+
+echo "[mmtp_word0_integ] phase ACY: consumption (message_id=0) + PA + MPT asset (AAF ingress)"
+run_phase "ACY" "${port_acy}" "${tmpdir}/acy.out" "${tmpdir}/gw_acy.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/acy.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --expect-mmt-si-message-byte-length 41 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-length 30 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expected-payloads "${aaf_payloads}"
+
+payloads="${saved_payloads_acy}"
+
+
+
+
+acz_payload="0100048000000d80000009000100000000000000"
+acz_payloads="${acz_payload},${acz_payload},${acz_payload},${acz_payload}"
+saved_payloads_acz="${payloads}"
+payloads="${acz_payloads}"
+
+echo "[mmtp_word0_integ] phase ACZ: consumption (message_id=0) + PA + PLT (ZL ingress)"
+run_phase "ACZ" "${port_acz}" "${tmpdir}/acz.out" "${tmpdir}/gw_acz.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info
+"${probe_bin}" verify \
+    --file "${tmpdir}/acz.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 20 \
+    --expect-mmt-si-message-byte-length 20 \
+    --expect-mmt-si-message-byte-length 20 \
+    --expect-mmt-si-message-byte-length 20 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-length 9 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-location-type 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${zl_payloads}"
+
+payloads="${saved_payloads_acz}"
+
+ada_payload="0100048000000a80000006010000000000"
+ada_payloads="${ada_payload},${ada_payload},${ada_payload},${ada_payload}"
+saved_payloads_ada="${payloads}"
+payloads="${ada_payloads}"
+
+echo "[mmtp_word0_integ] phase ADA: consumption (message_id=0) + PA + PLT (ZP ingress)"
+run_phase "ADA" "${port_ada}" "${tmpdir}/ada.out" "${tmpdir}/gw_ada.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry
+"${probe_bin}" verify \
+    --file "${tmpdir}/ada.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --expect-mmt-si-message-byte-length 17 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-length 6 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expected-payloads "${zp_payloads}"
+
+payloads="${saved_payloads_ada}"
+
+adb_payload="010004800000178000001300010000000001000000000000000000000000"
+adb_payloads="${adb_payload},${adb_payload},${adb_payload},${adb_payload}"
+saved_payloads_adb="${payloads}"
+payloads="${adb_payloads}"
+
+echo "[mmtp_word0_integ] phase ADB: consumption (message_id=0) + PA + PLT (ZM ingress)"
+run_phase "ADB" "${port_adb}" "${tmpdir}/adb.out" "${tmpdir}/gw_adb.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adb.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expected-payloads "${zm_payloads}"
+
+payloads="${saved_payloads_adb}"
+
+adc_payload="0100048000002f8000002b00010000000002000000000000000000000000000000000000000000000000000000000000000000000000"
+adc_payloads="${adc_payload},${adc_payload},${adc_payload},${adc_payload}"
+saved_payloads_adc="${payloads}"
+payloads="${adc_payloads}"
+
+echo "[mmtp_word0_integ] phase ADC: consumption (message_id=0) + PA + PLT (ZN ingress)"
+run_phase "ADC" "${port_adc}" "${tmpdir}/adc.out" "${tmpdir}/gw_adc.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/adc.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 54 \
+    --expect-mmt-si-message-byte-length 54 \
+    --expect-mmt-si-message-byte-length 54 \
+    --expect-mmt-si-message-byte-length 54 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-length 43 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expect-mmt-si-plt-delivery-info-location-type 2 \
+    --expected-payloads "${zn_payloads}"
+
+payloads="${saved_payloads_adc}"
+
+add_payload="0100048000000e8000000a00010000000005000000"
+add_payloads="${add_payload},${add_payload},${add_payload},${add_payload}"
+saved_payloads_add="${payloads}"
+payloads="${add_payloads}"
+
+echo "[mmtp_word0_integ] phase ADD: consumption (message_id=0) + PA + PLT (ZO ingress)"
+run_phase "ADD" "${port_add}" "${tmpdir}/add.out" "${tmpdir}/gw_add.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url
+"${probe_bin}" verify \
+    --file "${tmpdir}/add.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 21 \
+    --expect-mmt-si-message-byte-length 21 \
+    --expect-mmt-si-message-byte-length 21 \
+    --expect-mmt-si-message-byte-length 21 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-length 10 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expected-payloads "${zo_payloads}"
+
+payloads="${saved_payloads_add}"
+
+ade_payload="0100048000000b8000000701000101000000"
+ade_payloads="${ade_payload},${ade_payload},${ade_payload},${ade_payload}"
+saved_payloads_ade="${payloads}"
+payloads="${ade_payloads}"
+
+echo "[mmtp_word0_integ] phase ADE: consumption (message_id=0) + PA + PLT (ZR ingress)"
+run_phase "ADE" "${port_ade}" "${tmpdir}/ade.out" "${tmpdir}/gw_ade.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8
+"${probe_bin}" verify \
+    --file "${tmpdir}/ade.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --expect-mmt-si-message-byte-length 18 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-length 7 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-location-type 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expected-payloads "${zr_payloads}"
+
+payloads="${saved_payloads_ade}"
+
+adf_payload="010004800000128000000e0100000100000000000000000000"
+adf_payloads="${adf_payload},${adf_payload},${adf_payload},${adf_payload}"
+saved_payloads_adf="${payloads}"
+payloads="${adf_payloads}"
+
+echo "[mmtp_word0_integ] phase ADF: consumption (message_id=0) + PA + PLT (ZU ingress)"
+run_phase "ADF" "${port_adf}" "${tmpdir}/adf.out" "${tmpdir}/gw_adf.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adf.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expect-mmt-si-plt-package-packet-id 0 \
+    --expected-payloads "${zu_payloads}"
+
+payloads="${saved_payloads_adf}"
+
+adg_payload="0100048000001780000013000100000000010a000001e000000113880000"
+adg_payloads="${adg_payload},${adg_payload},${adg_payload},${adg_payload}"
+saved_payloads_adg="${payloads}"
+payloads="${adg_payloads}"
+
+echo "[mmtp_word0_integ] phase ADG: consumption (message_id=0) + PA + PLT (AAE ingress)"
+run_phase "ADG" "${port_adg}" "${tmpdir}/adg.out" "${tmpdir}/gw_adg.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adg.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --expect-mmt-si-message-byte-length 30 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-length 19 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 1 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-delivery-info-ipv4-dst-port 5000 \
+    --expected-payloads "${aae_payloads}"
+
+payloads="${saved_payloads_adg}"
+
+adh_payload="010004800000118000000d00010000000005036c61620000"
+adh_payloads="${adh_payload},${adh_payload},${adh_payload},${adh_payload}"
+saved_payloads_adh="${payloads}"
+payloads="${adh_payloads}"
+
+echo "[mmtp_word0_integ] phase ADH: consumption (message_id=0) + PA + PLT (ZQ ingress)"
+run_phase "ADH" "${port_adh}" "${tmpdir}/adh.out" "${tmpdir}/gw_adh.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url-3
+"${probe_bin}" verify \
+    --file "${tmpdir}/adh.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --expect-mmt-si-message-byte-length 24 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-length 13 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-length 3 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte0 108 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte1 97 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-url-3-byte2 98 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${zq_payloads}"
+
+payloads="${saved_payloads_adh}"
+
+adi_payload="010004800000138000000f010001010100000000000000000000"
+adi_payloads="${adi_payload},${adi_payload},${adi_payload},${adi_payload}"
+saved_payloads_adi="${payloads}"
+payloads="${adi_payloads}"
+
+echo "[mmtp_word0_integ] phase ADI: consumption (message_id=0) + PA + PLT (ZX ingress)"
+run_phase "ADI" "${port_adi}" "${tmpdir}/adi.out" "${tmpdir}/gw_adi.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adi.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 0 \
+    --expected-payloads "${zx_payloads}"
+
+payloads="${saved_payloads_adi}"
+
+adj_payload="0100048000002a800000260100000200000000000000000000000000000000000000000000000000000000000000000000"
+adj_payloads="${adj_payload},${adj_payload},${adj_payload},${adj_payload}"
+saved_payloads_adj="${payloads}"
+payloads="${adj_payloads}"
+
+echo "[mmtp_word0_integ] phase ADJ: consumption (message_id=0) + PA + PLT (ZZ ingress)"
+run_phase "ADJ" "${port_adj}" "${tmpdir}/adj.out" "${tmpdir}/gw_adj.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/adj.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expected-payloads "${zz_payloads}"
+
+payloads="${saved_payloads_adj}"
+
+adk_payload="0100048000002b80000027010001010200000000000000000000000000000000000000000000000000000000000000000000"
+adk_payloads="${adk_payload},${adk_payload},${adk_payload},${adk_payload}"
+saved_payloads_adk="${payloads}"
+payloads="${adk_payloads}"
+
+echo "[mmtp_word0_integ] phase ADK: consumption (message_id=0) + PA + PLT (AAB ingress)"
+run_phase "ADK" "${port_adk}" "${tmpdir}/adk.out" "${tmpdir}/gw_adk.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/adk.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 0 \
+    --expected-payloads "${aab_payloads}"
+
+payloads="${saved_payloads_adk}"
+
+adl_payload="010004800000128000000e0001000000000504687474700000"
+adl_payloads="${adl_payload},${adl_payload},${adl_payload},${adl_payload}"
+saved_payloads_adl="${payloads}"
+payloads="${adl_payloads}"
+
+echo "[mmtp_word0_integ] phase ADL: consumption (message_id=0) + PA + PLT (AAD ingress)"
+run_phase "ADL" "${port_adl}" "${tmpdir}/adl.out" "${tmpdir}/gw_adl.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-delivery-info-url-4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adl.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-packages 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 1 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-location-type 5 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-length 4 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte0 104 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte1 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte2 116 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-url-4-byte3 112 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expect-mmt-si-plt-delivery-info-descriptor-loop-length 0 \
+    --expected-payloads "${aad_payloads}"
+
+payloads="${saved_payloads_adl}"
+
+adm_payload="010004800000128000000e010000010a000001e00000011388"
+adm_payloads="${adm_payload},${adm_payload},${adm_payload},${adm_payload}"
+saved_payloads_adm="${payloads}"
+payloads="${adm_payloads}"
+
+echo "[mmtp_word0_integ] phase ADM: consumption (message_id=0) + PA + PLT (AAI ingress)"
+run_phase "ADM" "${port_adm}" "${tmpdir}/adm.out" "${tmpdir}/gw_adm.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adm.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --expect-mmt-si-message-byte-length 25 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-length 14 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expected-payloads "${aai_payloads}"
+
+payloads="${saved_payloads_adm}"
+
+adn_payload="010004800000138000000f01000101010a000001e00000011388"
+adn_payloads="${adn_payload},${adn_payload},${adn_payload},${adn_payload}"
+saved_payloads_adn="${payloads}"
+payloads="${adn_payloads}"
+
+echo "[mmtp_word0_integ] phase ADN: consumption (message_id=0) + PA + PLT (AAK ingress)"
+run_phase "ADN" "${port_adn}" "${tmpdir}/adn.out" "${tmpdir}/gw_adn.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adn.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --expect-mmt-si-message-byte-length 26 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-length 15 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-location-type 1 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-src-addr 167772161 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv4-dst-port 5000 \
+    --expected-payloads "${aak_payloads}"
+
+payloads="${saved_payloads_adn}"
+
+ado_payload="0100048000002b80000027010001010200000000000000000000ffff0a00000100000000000000000000ffffe00000011388"
+ado_payloads="${ado_payload},${ado_payload},${ado_payload},${ado_payload}"
+saved_payloads_ado="${payloads}"
+payloads="${ado_payloads}"
+
+echo "[mmtp_word0_integ] phase ADO: consumption (message_id=0) + PA + PLT (AAL ingress)"
+run_phase "ADO" "${port_ado}" "${tmpdir}/ado.out" "${tmpdir}/gw_ado.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-id8-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/ado.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --expect-mmt-si-message-byte-length 50 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-length 39 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-id-length 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-mmt-package-id 1 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expected-payloads "${aal_payloads}"
+
+payloads="${saved_payloads_ado}"
+
+adp_payload="010004200100232001001f00000000010000000000010100000000000101000000000000000000000000"
+adp_payloads="${adp_payload},${adp_payload},${adp_payload},${adp_payload}"
+saved_payloads_adp="${payloads}"
+payloads="${adp_payloads}"
+
+echo "[mmtp_word0_integ] phase ADP: consumption (message_id=0) + PA + MPT asset (ZW ingress)"
+run_phase "ADP" "${port_adp}" "${tmpdir}/adp.out" "${tmpdir}/gw_adp.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adp.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expected-payloads "${zw_payloads}"
+
+payloads="${saved_payloads_adp}"
+
+adq_payload="0100042001003b2001003700000000010000000000010100000000000102000000000000000000000000000000000000000000000000000000000000000000000000"
+adq_payloads="${adq_payload},${adq_payload},${adq_payload},${adq_payload}"
+saved_payloads_adq="${payloads}"
+payloads="${adq_payloads}"
+
+echo "[mmtp_word0_integ] phase ADQ: consumption (message_id=0) + PA + MPT asset (AAA ingress)"
+run_phase "ADQ" "${port_adq}" "${tmpdir}/adq.out" "${tmpdir}/gw_adq.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/adq.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expected-payloads "${aaa_payloads}"
+
+payloads="${saved_payloads_adq}"
+
+adr_payload="0100042001003a2001003600000000010000000000000000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000"
+adr_payloads="${adr_payload},${adr_payload},${adr_payload},${adr_payload}"
+saved_payloads_adr="${payloads}"
+payloads="${adr_payloads}"
+
+echo "[mmtp_word0_integ] phase ADR: consumption (message_id=0) + PA + MPT asset (AAH ingress)"
+run_phase "ADR" "${port_adr}" "${tmpdir}/adr.out" "${tmpdir}/gw_adr.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adr.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --expect-mmt-si-message-byte-length 65 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-length 54 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-id-length 0 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expected-payloads "${aah_payloads}"
+
+payloads="${saved_payloads_adr}"
+
+ads_payload="010004200100232001001f000000000100000000000101000000000001010a000001e000000113880000"
+ads_payloads="${ads_payload},${ads_payload},${ads_payload},${ads_payload}"
+saved_payloads_ads="${payloads}"
+payloads="${ads_payloads}"
+
+echo "[mmtp_word0_integ] phase ADS: consumption (message_id=0) + PA + MPT asset (AAM ingress)"
+run_phase "ADS" "${port_ads}" "${tmpdir}/ads.out" "${tmpdir}/gw_ads.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/ads.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --expect-mmt-si-message-byte-length 42 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-length 31 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expected-payloads "${aam_payloads}"
+
+payloads="${saved_payloads_ads}"
+
+adt_payload="0100042001003b200100370000000001000000000001010000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000"
+adt_payloads="${adt_payload},${adt_payload},${adt_payload},${adt_payload}"
+saved_payloads_adt="${payloads}"
+payloads="${adt_payloads}"
+
+echo "[mmtp_word0_integ] phase ADT: consumption (message_id=0) + PA + MPT asset (AAN ingress)"
+run_phase "ADT" "${port_adt}" "${tmpdir}/adt.out" "${tmpdir}/gw_adt.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adt.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expected-payloads "${aan_payloads}"
+
+payloads="${saved_payloads_adt}"
+
+adu_payload="01000420010024200100200000000001000000000002010200000000000101000000000000000000000000"
+adu_payloads="${adu_payload},${adu_payload},${adu_payload},${adu_payload}"
+saved_payloads_adu="${payloads}"
+payloads="${adu_payloads}"
+
+echo "[mmtp_word0_integ] phase ADU: consumption (message_id=0) + PA + MPT asset (AAO ingress)"
+run_phase "ADU" "${port_adu}" "${tmpdir}/adu.out" "${tmpdir}/gw_adu.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adu.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 0 \
+    --expected-payloads "${aao_payloads}"
+
+payloads="${saved_payloads_adu}"
+
+adv_payload="010004200100242001002000000000010000000000020102000000000001010a000001e000000113880000"
+adv_payloads="${adv_payload},${adv_payload},${adv_payload},${adv_payload}"
+saved_payloads_adv="${payloads}"
+payloads="${adv_payloads}"
+
+echo "[mmtp_word0_integ] phase ADV: consumption (message_id=0) + PA + MPT asset (AAP ingress)"
+run_phase "ADV" "${port_adv}" "${tmpdir}/adv.out" "${tmpdir}/gw_adv.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv4-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adv.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --expect-mmt-si-message-byte-length 43 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-length 32 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-location-type 1 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-src-addr 167772161 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-addr 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv4-dst-port 5000 \
+    --expected-payloads "${aap_payloads}"
+
+payloads="${saved_payloads_adv}"
+
+adw_payload="0100042001003b2001003700000000010000000000020102000000000001020000000000000000000000000000000000000000000000000000000000000000000000"
+adw_payloads="${adw_payload},${adw_payload},${adw_payload},${adw_payload}"
+saved_payloads_adw="${payloads}"
+payloads="${adw_payloads}"
+
+echo "[mmtp_word0_integ] phase ADW: consumption (message_id=0) + PA + MPT asset (AAQ ingress)"
+run_phase "ADW" "${port_adw}" "${tmpdir}/adw.out" "${tmpdir}/gw_adw.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv6
+"${probe_bin}" verify \
+    --file "${tmpdir}/adw.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --expect-mmt-si-message-byte-length 66 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-length 55 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 0 \
+    --expected-payloads "${aaq_payloads}"
+
+payloads="${saved_payloads_adw}"
+
+adx_payload="0100042001003c20010038000000000100000000000201020000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000"
+adx_payloads="${adx_payload},${adx_payload},${adx_payload},${adx_payload}"
+saved_payloads_adx="${payloads}"
+payloads="${adx_payloads}"
+
+echo "[mmtp_word0_integ] phase ADX: consumption (message_id=0) + PA + MPT asset (AAR ingress)"
+run_phase "ADX" "${port_adx}" "${tmpdir}/adx.out" "${tmpdir}/gw_adx.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-location-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/adx.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 67 \
+    --expect-mmt-si-message-byte-length 67 \
+    --expect-mmt-si-message-byte-length 67 \
+    --expect-mmt-si-message-byte-length 67 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-length 56 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-location-count 1 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 0 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-location-type 2 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expect-mmt-si-mpt-asset-ipv6-dst-port 5000 \
+    --expected-payloads "${aar_payloads}"
+
+payloads="${saved_payloads_adx}"
+
+ady_payload="0100042001001d20010019000000000100000000000201020000000000000004deadbeef"
+ady_payloads="${ady_payload},${ady_payload},${ady_payload},${ady_payload}"
+saved_payloads_ady="${payloads}"
+payloads="${ady_payloads}"
+
+echo "[mmtp_word0_integ] phase ADY: consumption (message_id=0) + PA + MPT asset (AAS ingress)"
+run_phase "ADY" "${port_ady}" "${tmpdir}/ady.out" "${tmpdir}/gw_ady.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id16-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/ady.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --expect-mmt-si-message-byte-length 36 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-length 25 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-id-length 2 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte0 1 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expect-mmt-si-mpt-asset-id16-byte1 2 \
+    --expected-payloads "${aas_payloads}"
+
+payloads="${saved_payloads_ady}"
+
+adz_payload="0100042001001c200100180000000001000000000001010000000000000004deadbeef"
+adz_payloads="${adz_payload},${adz_payload},${adz_payload},${adz_payload}"
+saved_payloads_adz="${payloads}"
+payloads="${adz_payloads}"
+
+echo "[mmtp_word0_integ] phase ADZ: consumption (message_id=0) + PA + MPT asset (AAT ingress)"
+run_phase "ADZ" "${port_adz}" "${tmpdir}/adz.out" "${tmpdir}/gw_adz.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-mpt-table-body \
+    --validate-mmt-si-mpt-asset-id8-descriptors4
+"${probe_bin}" verify \
+    --file "${tmpdir}/adz.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --expect-mmt-si-message-byte-length 35 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-id 32 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-length 24 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-table-body-num-assets 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-id-length 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-asset-id 1 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-location-count 0 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expect-mmt-si-mpt-asset-descriptors-length 4 \
+    --expected-payloads "${aat_payloads}"
+
+payloads="${saved_payloads_adz}"
+
+aea_payload="0100048000002a800000260100000200000000000000000000ffff0a00000100000000000000000000ffffe00000011388"
+aea_payloads="${aea_payload},${aea_payload},${aea_payload},${aea_payload}"
+saved_payloads_aea="${payloads}"
+payloads="${aea_payloads}"
+
+echo "[mmtp_word0_integ] phase AEA: consumption (message_id=0) + PA + PLT (AAJ ingress)"
+run_phase "AEA" "${port_aea}" "${tmpdir}/aea.out" "${tmpdir}/gw_aea.log" \
+    --prepend-mmtp-word0 \
+    --mmtp-payload-type "${mmtp_pt}" \
+    --mmtp-packet-id "${mmtp_pid}" \
+    --prepend-mmtp-signalling-prefix \
+    --prepend-mmt-si-message-header-len32 \
+    --mmtp-si-message-id 0 \
+    --mmtp-si-message-version 1 \
+    --validate-mmt-si-plt-table-body \
+    --validate-mmt-si-plt-package-entry-ipv6-nz
+"${probe_bin}" verify \
+    --file "${tmpdir}/aea.out.shard0" \
+    --strip-mmtp-word0 \
+    --expect-mmtp-payload-type "${mmtp_pt}" \
+    --expect-mmtp-packet-id "${mmtp_pid}" \
+    --strip-mmtp-signalling-prefix \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-fragmentation 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-reserved 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-length-extension 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-aggregation 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --expect-mmtp-signalling-fragment-counter 0 \
+    --strip-mmt-si-message-header-len32 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-id 0 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-version 1 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --expect-mmt-si-message-byte-length 49 \
+    --strip-mmt-si-pa-table-headers \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-pa-number-of-tables 1 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-id 128 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-length 38 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-packages 1 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-table-body-num-ip-delivery 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-id-length 0 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-location-type 2 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-src-addr-3 167772161 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-addr-3 3758096385 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expect-mmt-si-plt-package-ipv6-dst-port 5000 \
+    --expected-payloads "${aaj_payloads}"
+
+payloads="${saved_payloads_aea}"
+
 
 echo "[mmtp_word0_integ] PASS"

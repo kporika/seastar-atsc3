@@ -1160,6 +1160,988 @@ int run_mmtp_signalling_prefix_with_pa_mixed_table_body_si_tail_in_message(
     return 0;
 }
 
+int run_mmtp_signalling_prefix_with_pa_table_headers_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    if (pah.value.number_of_tables != 1u || pah.value.elements.size() != 1u ||
+        pah.value.elements[0].table_length != 0u) {
+        std::fprintf(stderr, "[%s] PA table index row mismatch\n", label);
+        return 1;
+    }
+    if (!span_equal(msg.value.payload, std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] message body mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_pa_table_body_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    if (pah.value.elements[0].table_length != 4u) {
+        std::fprintf(stderr, "[%s] PA table_length mismatch\n", label);
+        return 1;
+    }
+    if (!span_equal(msg.value.payload, std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] message body mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_pa_multi_table_bodies_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    if (pah.value.number_of_tables != 2u) {
+        std::fprintf(stderr, "[%s] PA table row count mismatch\n", label);
+        return 1;
+    }
+    if (!span_equal(msg.value.payload, std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] message body mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_pa_mixed_table_body_si_tail_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    if (pah.value.number_of_tables != 2u ||
+        pah.value.elements[0].table_length != 4u ||
+        pah.value.elements[1].table_length != 0u) {
+        std::fprintf(stderr, "[%s] PA header row field mismatch\n", label);
+        return 1;
+    }
+    if (!span_equal(msg.value.payload, std::span<const std::byte>(payload))) {
+        std::fprintf(stderr, "[%s] message body mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_table_body_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    cfg.validate_mmt_si_mpt_table_body        = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto mpt = atsc3::mmt_si_mpt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_table_body_prefix_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    cfg.validate_mmt_si_mpt_table_body        = true;
+    cfg.validate_mmt_si_mpt_table_body_prefix = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto mpt = atsc3::mmt_si_mpt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_table_body_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    cfg.validate_mmt_si_plt_table_body        = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto plt = atsc3::mmt_si_plt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_table_body_prefix_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                     = 0;
+    cfg.mmt_si_message_version                = 1;
+    cfg.validate_mmt_si_plt_table_body        = true;
+    cfg.validate_mmt_si_plt_table_body_prefix = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto plt = atsc3::mmt_si_plt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_pa_inline_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 0;
+    cfg.mmt_si_message_version              = 1;
+    cfg.validate_mmt_si_mpt_table_body      = true;
+    cfg.validate_mmt_si_mpt_asset           = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto mpt = atsc3::mmt_si_mpt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 19u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_pa_inline_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32            = true;
+    cfg.mmt_si_message_id                              = 0;
+    cfg.mmt_si_message_version                         = 1;
+    cfg.validate_mmt_si_mpt_table_body                 = true;
+    cfg.validate_mmt_si_mpt_asset_id8_location_ipv4    = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    const auto ingress = std::span<const std::byte>(payload);
+    auto       pah     = atsc3::mmt_si_pa_table_headers::decode(ingress);
+    if (!pah.ok || pah.bytes_consumed != 7u) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers fixture mismatch\n", label);
+        return 1;
+    }
+    auto mpt = atsc3::mmt_si_mpt_table::decode(ingress.subspan(pah.bytes_consumed));
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 31u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_location_ipv4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 1u ||
+        asset.value.location_type != 1u || asset.value.ipv4_src_addr != 0u ||
+        asset.value.ipv4_dst_addr != 0u || asset.value.dst_port != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id8_location_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_nz_pa_inline_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32                 = true;
+    cfg.mmt_si_message_id                                     = 0;
+    cfg.mmt_si_message_version                                = 1;
+    cfg.validate_mmt_si_mpt_table_body                        = true;
+    cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz       = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    const auto ingress = std::span<const std::byte>(payload);
+    auto       pah     = atsc3::mmt_si_pa_table_headers::decode(ingress);
+    if (!pah.ok || pah.bytes_consumed != 7u) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers fixture mismatch\n", label);
+        return 1;
+    }
+    auto mpt = atsc3::mmt_si_mpt_table::decode(ingress.subspan(pah.bytes_consumed));
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 56u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_location_ipv6_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 1u || asset.value.location_type != 2u ||
+        asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+        asset.value.ipv6_src_addr_2 != 65535u ||
+        asset.value.ipv6_src_addr_3 != 167772161u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 65535u ||
+        asset.value.ipv6_dst_addr_3 != 3758096385u ||
+        asset.value.dst_port != 5000u || asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_mpt_asset_id16_location_ipv6_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_pa_inline_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 0;
+    cfg.mmt_si_message_version              = 1;
+    cfg.validate_mmt_si_plt_table_body        = true;
+    cfg.validate_mmt_si_plt_delivery_info     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto tlv = atsc3::tlv_mux::decode(std::span<const std::byte>(
+        wire.bytes.data(), wire.bytes.size()));
+    if (!tlv.ok) {
+        std::fprintf(stderr, "[%s] tlv_mux decode failed: %s\n",
+                     label, tlv.error.c_str());
+        return 1;
+    }
+
+    auto alp = atsc3::alp::decode(tlv.value.payload);
+    if (!alp.ok) {
+        std::fprintf(stderr, "[%s] alp decode failed: %s\n",
+                     label, alp.error.c_str());
+        return 1;
+    }
+
+    const auto body            = alp.value.payload;
+    const std::size_t inner_si = payload.size();
+    const std::size_t want_len = 4u + 2u + 7u + inner_si;
+    if (body.size() != want_len) {
+        std::fprintf(stderr,
+                     "[%s] alp inner size mismatch: got %zu want %zu\n",
+                     label, body.size(), want_len);
+        return 1;
+    }
+
+    auto msg = atsc3::mmt_si_message_header_len32::decode(body.subspan(6));
+    if (!msg.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_message_header_len32 decode: %s\n", label,
+                     msg.error.c_str());
+        return 1;
+    }
+    if (msg.value.message_byte_length != static_cast<std::uint32_t>(inner_si)) {
+        std::fprintf(stderr, "[%s] message_byte_length mismatch\n", label);
+        return 1;
+    }
+
+    auto pah = atsc3::mmt_si_pa_table_headers::decode(msg.value.payload);
+    if (!pah.ok) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers decode: %s\n", label,
+                     pah.error.c_str());
+        return 1;
+    }
+    auto plt = atsc3::mmt_si_plt_table::decode(
+        msg.value.payload.subspan(pah.bytes_consumed));
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 9u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 0u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_url3_pa_inline_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32      = true;
+    cfg.mmt_si_message_id                        = 0;
+    cfg.mmt_si_message_version                   = 1;
+    cfg.validate_mmt_si_plt_table_body           = true;
+    cfg.validate_mmt_si_plt_delivery_info_url_3  = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    const auto ingress = std::span<const std::byte>(payload);
+    auto       pah     = atsc3::mmt_si_pa_table_headers::decode(ingress);
+    if (!pah.ok || pah.bytes_consumed != 7u) {
+        std::fprintf(stderr, "[%s] mmt_si_pa_table_headers fixture mismatch\n", label);
+        return 1;
+    }
+    auto plt = atsc3::mmt_si_plt_table::decode(
+        ingress.subspan(pah.bytes_consumed));
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 13u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_url_3::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 5u ||
+        delivery.value.url_length != 3u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_url_3 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
 int run_mmtp_signalling_prefix_with_mpt_table_body_in_message(
     const char *label,
     std::uint8_t payload_type,
@@ -1194,6 +2176,1943 @@ int run_mmtp_signalling_prefix_with_mpt_table_body_in_message(
     auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
     if (!pref.ok || pref.value.number_of_assets != 0u) {
         std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpi_descriptor_loop_in_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32    = true;
+    cfg.mmt_si_message_id                      = 1;
+    cfg.mmt_si_message_version                 = 0;
+    cfg.prepend_mmt_si_descriptor_loop_u32     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body      = true;
+    cfg.validate_mmt_si_mpt_asset           = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 19u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body      = true;
+    cfg.validate_mmt_si_mpt_asset_id8       = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 20u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id8 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32   = true;
+    cfg.mmt_si_message_id                     = 128;
+    cfg.mmt_si_message_version                = 0;
+    cfg.validate_mmt_si_plt_table_body        = true;
+    cfg.validate_mmt_si_plt_delivery_info     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 9u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 0u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_descriptors4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32    = true;
+    cfg.mmt_si_message_id                      = 16;
+    cfg.mmt_si_message_version                 = 0;
+    cfg.validate_mmt_si_mpt_table_body         = true;
+    cfg.validate_mmt_si_mpt_asset_descriptors4 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 23u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_descriptors4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 4u ||
+        asset.value.descriptor_byte0 != 0xDEu ||
+        asset.value.descriptor_byte1 != 0xADu ||
+        asset.value.descriptor_byte2 != 0xBEu ||
+        asset.value.descriptor_byte3 != 0xEFu) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_descriptors4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_location_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32        = true;
+    cfg.mmt_si_message_id                          = 16;
+    cfg.mmt_si_message_version                     = 0;
+    cfg.validate_mmt_si_mpt_table_body             = true;
+    cfg.validate_mmt_si_mpt_asset_location_ipv4    = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 30u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_location_ipv4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 1u || asset.value.location_type != 1u ||
+        asset.value.ipv4_src_addr != 0u || asset.value.ipv4_dst_addr != 0u ||
+        asset.value.dst_port != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_location_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32   = true;
+    cfg.mmt_si_message_id                     = 128;
+    cfg.mmt_si_message_version                = 0;
+    cfg.validate_mmt_si_plt_table_body        = true;
+    cfg.validate_mmt_si_plt_package_entry     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 6u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 0u ||
+        entry.value.location_type != 0u || entry.value.packet_id != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_id8_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32      = true;
+    cfg.mmt_si_message_id                        = 128;
+    cfg.mmt_si_message_version                   = 0;
+    cfg.validate_mmt_si_plt_table_body           = true;
+    cfg.validate_mmt_si_plt_package_entry_id8  = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 7u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_id8::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 1u ||
+        entry.value.MMT_package_id != 1u || entry.value.location_type != 0u ||
+        entry.value.packet_id != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry_id8 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32        = true;
+    cfg.mmt_si_message_id                          = 128;
+    cfg.mmt_si_message_version                     = 0;
+    cfg.validate_mmt_si_plt_table_body             = true;
+    cfg.validate_mmt_si_plt_delivery_info_ipv6     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 43u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_ipv6::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 2u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_ipv6 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_url_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32         = true;
+    cfg.mmt_si_message_id                           = 128;
+    cfg.mmt_si_message_version                      = 0;
+    cfg.validate_mmt_si_plt_table_body              = true;
+    cfg.validate_mmt_si_plt_delivery_info_url       = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 10u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_url::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 5u ||
+        delivery.value.url_length != 0u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_url mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32      = true;
+    cfg.mmt_si_message_id                        = 128;
+    cfg.mmt_si_message_version                   = 0;
+    cfg.validate_mmt_si_plt_table_body           = true;
+    cfg.validate_mmt_si_plt_package_entry_ipv4   = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 14u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_ipv4::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 0u ||
+        entry.value.location_type != 1u || entry.value.ipv4_src_addr != 0u ||
+        entry.value.ipv4_dst_addr != 0u || entry.value.dst_port != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32         = true;
+    cfg.mmt_si_message_id                           = 128;
+    cfg.mmt_si_message_version                      = 0;
+    cfg.validate_mmt_si_plt_table_body              = true;
+    cfg.validate_mmt_si_plt_package_entry_ipv6      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 38u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_ipv6::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 0u ||
+        entry.value.location_type != 2u || entry.value.ipv6_src_addr_0 != 0u ||
+        entry.value.ipv6_src_addr_1 != 0u || entry.value.ipv6_src_addr_2 != 0u ||
+        entry.value.ipv6_src_addr_3 != 0u || entry.value.ipv6_dst_addr_0 != 0u ||
+        entry.value.ipv6_dst_addr_1 != 0u || entry.value.ipv6_dst_addr_2 != 0u ||
+        entry.value.ipv6_dst_addr_3 != 0u || entry.value.dst_port != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry_ipv6 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_url_3_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32          = true;
+    cfg.mmt_si_message_id                            = 128;
+    cfg.mmt_si_message_version                       = 0;
+    cfg.validate_mmt_si_plt_table_body               = true;
+    cfg.validate_mmt_si_plt_delivery_info_url_3      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 13u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_url_3::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 5u ||
+        delivery.value.url_length != 3u || delivery.value.url_byte0 != 0x6Cu ||
+        delivery.value.url_byte1 != 0x61u || delivery.value.url_byte2 != 0x62u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_url_3 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_url_4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32           = true;
+    cfg.mmt_si_message_id                             = 128;
+    cfg.mmt_si_message_version                        = 0;
+    cfg.validate_mmt_si_plt_table_body                = true;
+    cfg.validate_mmt_si_plt_delivery_info_url_4         = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 14u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_url_4::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 5u ||
+        delivery.value.url_length != 4u || delivery.value.url_byte0 != 0x68u ||
+        delivery.value.url_byte1 != 0x74u || delivery.value.url_byte2 != 0x74u ||
+        delivery.value.url_byte3 != 0x70u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_url_4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32            = true;
+    cfg.mmt_si_message_id                              = 128;
+    cfg.mmt_si_message_version                         = 0;
+    cfg.validate_mmt_si_plt_table_body                 = true;
+    cfg.validate_mmt_si_plt_delivery_info_ipv4_nz      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 19u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_ipv4_nz::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 1u ||
+        delivery.value.ipv4_src_addr != 0x0A000001u ||
+        delivery.value.ipv4_dst_addr != 0xE0000001u ||
+        delivery.value.dst_port != 5000u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_ipv4_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32             = true;
+    cfg.mmt_si_message_id                               = 128;
+    cfg.mmt_si_message_version                          = 0;
+    cfg.validate_mmt_si_plt_table_body                  = true;
+    cfg.validate_mmt_si_plt_package_entry_ipv4_nz       = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 14u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_ipv4_nz::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 0u ||
+        entry.value.location_type != 1u ||
+        entry.value.ipv4_src_addr != 0x0A000001u ||
+        entry.value.ipv4_dst_addr != 0xE0000001u ||
+        entry.value.dst_port != 5000u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry_ipv4_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_ipv6_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32              = true;
+    cfg.mmt_si_message_id                                = 128;
+    cfg.mmt_si_message_version                           = 0;
+    cfg.validate_mmt_si_plt_table_body                   = true;
+    cfg.validate_mmt_si_plt_package_entry_ipv6_nz        = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 38u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_ipv6_nz::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 0u ||
+        entry.value.location_type != 2u ||
+        entry.value.ipv6_src_addr_0 != 0u || entry.value.ipv6_src_addr_1 != 0u ||
+        entry.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+        entry.value.ipv6_src_addr_3 != 0x0A000001u ||
+        entry.value.ipv6_dst_addr_0 != 0u || entry.value.ipv6_dst_addr_1 != 0u ||
+        entry.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+        entry.value.ipv6_dst_addr_3 != 0xE0000001u ||
+        entry.value.dst_port != 5000u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_package_entry_ipv6_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_location_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32              = true;
+    cfg.mmt_si_message_id                                = 16;
+    cfg.mmt_si_message_version                           = 0;
+    cfg.validate_mmt_si_mpt_table_body                   = true;
+    cfg.validate_mmt_si_mpt_asset_location_ipv4_nz       = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 30u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_location_ipv4_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 1u || asset.value.location_type != 1u ||
+        asset.value.ipv4_src_addr != 0x0A000001u ||
+        asset.value.ipv4_dst_addr != 0xE0000001u ||
+        asset.value.dst_port != 5000u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_location_ipv4_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_location0_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body       = true;
+    cfg.validate_mmt_si_mpt_asset_location0 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 22u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_location0::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 1u || asset.value.location_type != 0u ||
+        asset.value.packet_id != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_location0 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body                 = true;
+    cfg.validate_mmt_si_mpt_asset_id8_location_ipv4 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 31u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_location_ipv4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 1u ||
+        asset.value.location_type != 1u || asset.value.ipv4_src_addr != 0u ||
+        asset.value.ipv4_dst_addr != 0u || asset.value.dst_port != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id8_location_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 128;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_plt_table_body = true;
+    cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 15u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_id8_location_ipv4::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 1u ||
+        entry.value.MMT_package_id != 1u || entry.value.location_type != 1u ||
+        entry.value.ipv4_src_addr != 0u || entry.value.ipv4_dst_addr != 0u ||
+        entry.value.dst_port != 0u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_plt_package_entry_id8_location_ipv4 mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body                 = true;
+    cfg.validate_mmt_si_mpt_asset_id8_location_ipv6 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 55u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_location_ipv6::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 1u ||
+        asset.value.location_type != 2u || asset.value.ipv6_src_addr_0 != 0u ||
+        asset.value.ipv6_src_addr_1 != 0u || asset.value.ipv6_src_addr_2 != 0u ||
+        asset.value.ipv6_src_addr_3 != 0u || asset.value.ipv6_dst_addr_0 != 0u ||
+        asset.value.ipv6_dst_addr_1 != 0u || asset.value.ipv6_dst_addr_2 != 0u ||
+        asset.value.ipv6_dst_addr_3 != 0u || asset.value.dst_port != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id8_location_ipv6 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 128;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_plt_table_body = true;
+    cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 39u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_id8_location_ipv6::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 1u ||
+        entry.value.MMT_package_id != 1u || entry.value.location_type != 2u ||
+        entry.value.ipv6_src_addr_0 != 0u || entry.value.ipv6_src_addr_1 != 0u ||
+        entry.value.ipv6_src_addr_2 != 0u || entry.value.ipv6_src_addr_3 != 0u ||
+        entry.value.ipv6_dst_addr_0 != 0u || entry.value.ipv6_dst_addr_1 != 0u ||
+        entry.value.ipv6_dst_addr_2 != 0u || entry.value.ipv6_dst_addr_3 != 0u ||
+        entry.value.dst_port != 0u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_plt_package_entry_id8_location_ipv6 mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_location_ipv6_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body                = true;
+    cfg.validate_mmt_si_mpt_asset_location_ipv6_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 54u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_location_ipv6_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 1u || asset.value.location_type != 2u ||
+        asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+        asset.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+        asset.value.ipv6_src_addr_3 != 0x0A000001u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+        asset.value.ipv6_dst_addr_3 != 0xE0000001u ||
+        asset.value.dst_port != 5000u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_location_ipv6_nz mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 128;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_plt_table_body = true;
+    cfg.validate_mmt_si_plt_package_entry_id8_location_ipv4_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 15u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_id8_location_ipv4_nz::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 1u ||
+        entry.value.MMT_package_id != 1u || entry.value.location_type != 1u ||
+        entry.value.ipv4_src_addr != 0x0A000001u ||
+        entry.value.ipv4_dst_addr != 0xE0000001u ||
+        entry.value.dst_port != 5000u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_plt_package_entry_id8_location_ipv4_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 128;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_plt_table_body = true;
+    cfg.validate_mmt_si_plt_package_entry_id8_location_ipv6_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 39u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 1u ||
+        pref.value.num_of_ip_delivery != 0u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto entry = atsc3::mmt_si_plt_package_entry_id8_location_ipv6_nz::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!entry.ok || entry.value.MMT_package_id_length != 1u ||
+        entry.value.MMT_package_id != 1u || entry.value.location_type != 2u ||
+        entry.value.ipv6_src_addr_0 != 0u || entry.value.ipv6_src_addr_1 != 0u ||
+        entry.value.ipv6_src_addr_2 != 0x0000FFFFu ||
+        entry.value.ipv6_src_addr_3 != 0x0A000001u ||
+        entry.value.ipv6_dst_addr_0 != 0u || entry.value.ipv6_dst_addr_1 != 0u ||
+        entry.value.ipv6_dst_addr_2 != 0x0000FFFFu ||
+        entry.value.ipv6_dst_addr_3 != 0xE0000001u ||
+        entry.value.dst_port != 5000u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_plt_package_entry_id8_location_ipv6_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body                    = true;
+    cfg.validate_mmt_si_mpt_asset_id8_location_ipv4_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 31u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_location_ipv4_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 1u ||
+        asset.value.location_type != 1u ||
+        asset.value.ipv4_src_addr != 0x0A000001u ||
+        asset.value.ipv4_dst_addr != 0xE0000001u ||
+        asset.value.dst_port != 5000u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_mpt_asset_id8_location_ipv4_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body                    = true;
+    cfg.validate_mmt_si_mpt_asset_id8_location_ipv6_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 55u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_location_ipv6_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 1u ||
+        asset.value.location_type != 2u || asset.value.ipv6_src_addr_0 != 0u ||
+        asset.value.ipv6_src_addr_1 != 0u || asset.value.ipv6_src_addr_2 != 65535u ||
+        asset.value.ipv6_src_addr_3 != 167772161u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 65535u ||
+        asset.value.ipv6_dst_addr_3 != 3758096385u || asset.value.dst_port != 5000u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr,
+                     "[%s] mmt_si_mpt_asset_id8_location_ipv6_nz mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body = true;
+    cfg.validate_mmt_si_mpt_asset_id16_location_ipv4 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 32u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u || pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_location_ipv4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || (asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 1u || asset.value.location_type != 1u ||
+        asset.value.ipv4_src_addr != 0u || asset.value.ipv4_dst_addr != 0u ||
+        asset.value.dst_port != 0u || asset.value.asset_descriptors_length != 0u)) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16_location_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body = true;
+    cfg.validate_mmt_si_mpt_asset_id16_location_ipv4_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 32u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u || pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_location_ipv4_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || (asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 1u || asset.value.location_type != 1u ||
+        asset.value.ipv4_src_addr != 0x0A000001u || asset.value.ipv4_dst_addr != 0xE0000001u ||
+        asset.value.dst_port != 5000u || asset.value.asset_descriptors_length != 0u)) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16_location_ipv4_nz mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body = true;
+    cfg.validate_mmt_si_mpt_asset_id16_location_ipv6 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 55u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u || pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset_span = mpt.value.payload.subspan(pref.bytes_consumed);
+    std::vector<std::byte> asset_buf(asset_span.begin(), asset_span.end());
+    if (asset_buf.size() == 50u) {
+        asset_buf.push_back(std::byte{0});
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_location_ipv6::decode(asset_buf);
+    if (!asset.ok || (asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 1u || asset.value.location_type != 2u ||
+        asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+        asset.value.ipv6_src_addr_2 != 0u || asset.value.ipv6_src_addr_3 != 0u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 0u || asset.value.ipv6_dst_addr_3 != 0u ||
+        asset.value.dst_port != 0u || asset.value.asset_descriptors_length != 0u)) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16_location_ipv6 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_nz_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body = true;
+    cfg.validate_mmt_si_mpt_asset_id16_location_ipv6_nz = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 56u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u || pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_location_ipv6_nz::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || (asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 1u || asset.value.location_type != 2u ||
+        asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+        asset.value.ipv6_src_addr_2 != 65535u || asset.value.ipv6_src_addr_3 != 167772161u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 65535u || asset.value.ipv6_dst_addr_3 != 3758096385u ||
+        asset.value.dst_port != 5000u || asset.value.asset_descriptors_length != 0u)) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16_location_ipv6_nz mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_descriptors4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body = true;
+    cfg.validate_mmt_si_mpt_asset_id16_descriptors4 = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 25u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u || pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16_descriptors4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || (asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 1u || asset.value.asset_id_byte1 != 2u ||
+        asset.value.location_count != 0u || asset.value.asset_descriptors_length != 4u ||
+        asset.value.descriptor_byte0 != 0xDEu || asset.value.descriptor_byte1 != 0xADu ||
+        asset.value.descriptor_byte2 != 0xBEu || asset.value.descriptor_byte3 != 0xEFu)) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16_descriptors4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_location_ipv6_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32        = true;
+    cfg.mmt_si_message_id                            = 16;
+    cfg.mmt_si_message_version                       = 0;
+    cfg.validate_mmt_si_mpt_table_body               = true;
+    cfg.validate_mmt_si_mpt_asset_location_ipv6      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 54u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_location_ipv6::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 0u ||
+        asset.value.location_count != 1u || asset.value.location_type != 2u ||
+        asset.value.ipv6_src_addr_0 != 0u || asset.value.ipv6_src_addr_1 != 0u ||
+        asset.value.ipv6_src_addr_2 != 0u || asset.value.ipv6_src_addr_3 != 0u ||
+        asset.value.ipv6_dst_addr_0 != 0u || asset.value.ipv6_dst_addr_1 != 0u ||
+        asset.value.ipv6_dst_addr_2 != 0u || asset.value.ipv6_dst_addr_3 != 0u ||
+        asset.value.dst_port != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_location_ipv6 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id16_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 16;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_mpt_table_body      = true;
+    cfg.validate_mmt_si_mpt_asset_id16      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 21u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id16::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 2u ||
+        asset.value.asset_id_byte0 != 0x01u ||
+        asset.value.asset_id_byte1 != 0x02u ||
+        asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id16 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_mpt_asset_id8_descriptors4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32            = true;
+    cfg.mmt_si_message_id                              = 16;
+    cfg.mmt_si_message_version                         = 0;
+    cfg.validate_mmt_si_mpt_table_body                 = true;
+    cfg.validate_mmt_si_mpt_asset_id8_descriptors4     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+    if (!mpt.ok || mpt.value.table_id != 32u || mpt.value.table_length != 24u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_mpt_table_body_prefix::decode(mpt.value.payload);
+    if (!pref.ok || pref.value.number_of_assets != 1u ||
+        pref.bytes_consumed != 5u) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto asset = atsc3::mmt_si_mpt_asset_id8_descriptors4::decode(
+        mpt.value.payload.subspan(pref.bytes_consumed));
+    if (!asset.ok || asset.value.asset_id_length != 1u ||
+        asset.value.asset_id != 1u || asset.value.location_count != 0u ||
+        asset.value.asset_descriptors_length != 4u ||
+        asset.value.descriptor_byte0 != 0xDEu ||
+        asset.value.descriptor_byte1 != 0xADu ||
+        asset.value.descriptor_byte2 != 0xBEu ||
+        asset.value.descriptor_byte3 != 0xEFu) {
+        std::fprintf(stderr, "[%s] mmt_si_mpt_asset_id8_descriptors4 mismatch\n",
+                     label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_delivery_info_ipv4_in_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32        = true;
+    cfg.mmt_si_message_id                          = 128;
+    cfg.mmt_si_message_version                     = 0;
+    cfg.validate_mmt_si_plt_table_body             = true;
+    cfg.validate_mmt_si_plt_delivery_info_ipv4     = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 19u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
+        return 1;
+    }
+    auto pref = atsc3::mmt_si_plt_table_body_prefix::decode(plt.value.payload);
+    if (!pref.ok || pref.value.num_of_packages != 0u ||
+        pref.value.num_of_ip_delivery != 1u || pref.bytes_consumed != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table_body_prefix mismatch\n", label);
+        return 1;
+    }
+    auto delivery = atsc3::mmt_si_plt_delivery_info_ipv4::decode(
+        plt.value.payload.subspan(pref.bytes_consumed));
+    if (!delivery.ok || delivery.value.location_type != 1u ||
+        delivery.value.descripor_loop_length != 0u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_delivery_info_ipv4 mismatch\n", label);
+        return 1;
+    }
+
+    std::printf("[%s] OK (user=%zu wire=%zu)\n", label, payload.size(),
+                wire.bytes.size());
+    return 0;
+}
+
+int run_mmtp_signalling_prefix_with_plt_consumption_message(
+    const char *label,
+    std::uint8_t payload_type,
+    std::uint16_t packet_id,
+    const atsc3::mmtp_payload_signalling_prefix::decoded_t &sig,
+    const std::vector<std::byte> &payload) {
+    atsc3::gw::encoder_pipeline::config cfg =
+        atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+            sig, atsc3::gw::with_prepended_lab_mmtp_word0(payload_type, packet_id));
+    cfg.prepend_mmt_si_message_header_len32 = true;
+    cfg.mmt_si_message_id                   = 128;
+    cfg.mmt_si_message_version              = 0;
+    cfg.validate_mmt_si_plt_table_body      = true;
+    atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+
+    auto wire = enc.encode(std::span<const std::byte>(payload));
+    if (!wire.ok) {
+        std::fprintf(stderr, "[%s] encode failed: %s\n",
+                     label, wire.error.c_str());
+        return 1;
+    }
+
+    auto plt = atsc3::mmt_si_plt_table::decode(payload);
+    if (!plt.ok || plt.value.table_id != 128u || plt.value.table_length != 2u) {
+        std::fprintf(stderr, "[%s] mmt_si_plt_table fixture mismatch\n", label);
         return 1;
     }
 
@@ -4827,6 +7746,35 @@ int main() {
             failures += run_mmtp_signalling_prefix_with_message_header_len32(
                 "mmtp-signalling-si-msg+len32+desc", 2, 0x10u, sig_e, true, true,
                 0u, 9u, desc_wire);
+            failures += run_mmtp_signalling_prefix_with_message_header_len32(
+                "mmtp-signalling-si-mpi-msg", 2, 1u, sig_e, false, false, 1u, 0u,
+                std::vector<std::byte>{std::byte{0xDE}, std::byte{0xAD}});
+            failures += run_mmtp_signalling_prefix_with_message_header_len32(
+                "mmtp-signalling-si-mpi-msg-4b", 2, 1u, sig_e, false, false, 1u,
+                0u,
+                std::vector<std::byte>{std::byte{0xDE}, std::byte{0xAD},
+                                       std::byte{0xBE}, std::byte{0xEF}});
+            {
+                atsc3::gw::encoder_pipeline::config cfg =
+                    atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+                        sig_e,
+                        atsc3::gw::with_prepended_lab_mmtp_word0(2, 0x10u));
+                cfg.prepend_mmt_si_message_header_len32 = true;
+                cfg.mmt_si_message_id                   = 1;
+                cfg.prepend_mmt_si_pa_table_headers     = true;
+                cfg.mmt_si_pa_table_header_rows = {
+                    atsc3::gw::encoder_pipeline::config::mmt_si_pa_table_header_row{
+                        32, 1, 0}};
+                atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+                auto bad = enc.encode(std::span<const std::byte>(
+                    std::vector<std::byte>{std::byte{0x01}}));
+                if (bad.ok) {
+                    std::fprintf(stderr,
+                                 "[pa-table-headers-mpi-message-id] expected "
+                                 "encode failure\n");
+                    ++failures;
+                }
+            }
             failures += run_mmtp_signalling_prefix_with_pa_table_headers_in_message(
                 "mmtp-signalling-si-pa-table+msg", 2, 0x10u, sig_e,
                 std::vector<std::byte>{std::byte{0x10}, std::byte{0x20},
@@ -4894,6 +7842,174 @@ int main() {
                                        std::byte{0xBE}, std::byte{0xEF},
                                        std::byte{0x10}, std::byte{0x20},
                                        std::byte{0x30}});
+            failures +=
+                run_mmtp_signalling_prefix_with_pa_table_headers_in_consumption_message(
+                    "mmtp-signalling-si-pa-table-consumption-msg", 2, 0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x10}, std::byte{0x20},
+                        std::byte{0x30}, std::byte{0x40}});
+            failures +=
+                run_mmtp_signalling_prefix_with_pa_table_body_in_consumption_message(
+                    "mmtp-signalling-si-pa-table-body-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x04}, std::byte{0xDE}, std::byte{0xAD},
+                        std::byte{0xBE}, std::byte{0xEF}});
+            failures +=
+                run_mmtp_signalling_prefix_with_pa_multi_table_bodies_in_consumption_message(
+                    "mmtp-signalling-si-pa-multi-table-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x02}, std::byte{0x00}, std::byte{0x08},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x04}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x04}, std::byte{0xDE},
+                        std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF},
+                        std::byte{0xCA}, std::byte{0xFE}, std::byte{0xBA},
+                        std::byte{0xBE}});
+            failures +=
+                run_mmtp_signalling_prefix_with_pa_mixed_table_body_si_tail_in_consumption_message(
+                    "mmtp-signalling-si-pa-mixed-consumption-msg", 2, 0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x02}, std::byte{0x00}, std::byte{0x08},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x04}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0xDE},
+                        std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF},
+                        std::byte{0x10}, std::byte{0x20}, std::byte{0x30}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_table_body_in_consumption_message(
+                    "mmtp-signalling-si-mpt-table-body-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x09}, std::byte{0x20}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x05}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_table_body_prefix_in_consumption_message(
+                    "mmtp-signalling-si-mpt-table-body-prefix-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x09}, std::byte{0x20}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x05}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_table_body_in_consumption_message(
+                    "mmtp-signalling-si-plt-table-body-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x06}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x02}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_table_body_prefix_in_consumption_message(
+                    "mmtp-signalling-si-plt-table-body-prefix-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x06}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x02}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_pa_inline_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-pa-inline-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x17}, std::byte{0x20}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x13}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_pa_inline_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-ipv4-pa-inline-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x23}, std::byte{0x20}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x1f}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_nz_pa_inline_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-ipv6-nz-pa-inline-consumption-msg",
+                    2, 0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x3c}, std::byte{0x20}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x38}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x02}, std::byte{0x01}, std::byte{0x02},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x02}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0xff},
+                        std::byte{0xff}, std::byte{0x0a}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0xff}, std::byte{0xff}, std::byte{0xe0},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x13}, std::byte{0x88}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_pa_inline_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-pa-inline-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0d}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x09}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_url3_pa_inline_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-url3-pa-inline-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x11}, std::byte{0x80}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x0d}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x05},
+                        std::byte{0x03}, std::byte{0x6c}, std::byte{0x61},
+                        std::byte{0x62}, std::byte{0x00}, std::byte{0x00}});
             failures += run_mmtp_signalling_prefix_with_mpt_table_body_in_message(
                 "mmtp-signalling-si-mpt-table+msg", 2, 0x10u, sig_e,
                 std::vector<std::byte>{std::byte{0x20}, std::byte{0x01},
@@ -4901,6 +8017,510 @@ int main() {
                                        std::byte{0x00}, std::byte{0x00},
                                        std::byte{0x00}, std::byte{0x00},
                                        std::byte{0x00}});
+            failures += run_mmtp_signalling_prefix_with_mpt_consumption_message(
+                "mmtp-signalling-si-mpt-consumption-msg", 2, 2u, sig_e,
+                std::vector<std::byte>{std::byte{0x20}, std::byte{0x01},
+                                       std::byte{0x00}, std::byte{0x05},
+                                       std::byte{0x00}, std::byte{0x00},
+                                       std::byte{0x00}, std::byte{0x00},
+                                       std::byte{0x00}});
+            {
+                atsc3::gw::encoder_pipeline::config cfg =
+                    atsc3::gw::with_prepended_lab_mmtp_signalling_prefix(
+                        sig_e,
+                        atsc3::gw::with_prepended_lab_mmtp_word0(2, 2u));
+                cfg.prepend_mmt_si_message_header_len32 = true;
+                cfg.mmt_si_message_id                   = 16;
+                cfg.prepend_mmt_si_pa_table_headers     = true;
+                cfg.mmt_si_pa_table_header_rows = {
+                    atsc3::gw::encoder_pipeline::config::mmt_si_pa_table_header_row{
+                        32, 1, 9}};
+                atsc3::gw::encoder_pipeline enc{std::move(cfg)};
+                auto bad = enc.encode(std::span<const std::byte>(
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01},
+                                           std::byte{0x00}, std::byte{0x05},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}}));
+                if (bad.ok) {
+                    std::fprintf(stderr,
+                                 "[pa-table-headers-mpt-message-id] expected "
+                                 "encode failure\n");
+                    ++failures;
+                }
+            }
+            failures += run_mmtp_signalling_prefix_with_mpi_descriptor_loop_in_message(
+                "mmtp-signalling-si-mpi-desc-loop+msg", 2, 1u, sig_e,
+                std::vector<std::byte>{std::byte{0x10}, std::byte{0x04},
+                                       std::byte{0xDE}, std::byte{0xAD},
+                                       std::byte{0xBE}, std::byte{0xEF}});
+            failures += run_mmtp_signalling_prefix_with_mpt_asset_in_consumption_message(
+                "mmtp-signalling-si-mpt-asset-consumption-msg", 2, 2u, sig_e,
+                std::vector<std::byte>{
+                    std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                    std::byte{0x13}, std::byte{0x00}, std::byte{0x00},
+                    std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                    std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                    std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                    std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                    std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                    std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-consumption-msg", 2, 2u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x14}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x01}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{std::byte{0x80}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x09},
+                                           std::byte{0x00}, std::byte{0x01},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_descriptors4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-descriptors4-consumption-msg", 2, 2u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x17}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x04},
+                        std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE},
+                        std::byte{0xEF}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-location-ipv4-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x1E}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{std::byte{0x80}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x06},
+                                           std::byte{0x01}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-id8-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{std::byte{0x80}, std::byte{0x00},
+                                           std::byte{0x00}, std::byte{0x07},
+                                           std::byte{0x01}, std::byte{0x00},
+                                           std::byte{0x01}, std::byte{0x01},
+                                           std::byte{0x00}, std::byte{0x00},
+                                           std::byte{0x00}});
+            {
+                static const std::uint8_t zn[] = {
+                    0x80u, 0x00u, 0x00u, 0x2bu, 0x00u, 0x01u, 0x00u, 0x00u, 0x00u, 0x00u,
+                    0x02u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+                    0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+                    0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+                    0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+                };
+                std::vector<std::byte> zn_ingress;
+                zn_ingress.reserve(sizeof(zn));
+                for (const auto b : zn) {
+                    zn_ingress.push_back(static_cast<std::byte>(b));
+                }
+                failures +=
+                    run_mmtp_signalling_prefix_with_plt_delivery_info_ipv6_in_consumption_message(
+                        "mmtp-signalling-si-plt-delivery-ipv6-consumption-msg", 2, 0x10u,
+                        sig_e, zn_ingress);
+            }
+            {
+                std::vector<std::byte> zy_ingress;
+                zy_ingress.reserve(58u);
+                for (const unsigned b :
+                     {0x20u, 0x01u, 0x00u, 0x36u, 0x00u, 0x00u, 0x00u, 0x00u, 0x01u}) {
+                    zy_ingress.push_back(static_cast<std::byte>(b));
+                }
+                zy_ingress.insert(zy_ingress.end(), 49u, std::byte{0x00});
+                zy_ingress[20] = std::byte{0x01};
+                zy_ingress[21] = std::byte{0x02};
+                failures +=
+                    run_mmtp_signalling_prefix_with_mpt_asset_location_ipv6_in_consumption_message(
+                        "mmtp-signalling-si-mpt-asset-location-ipv6-consumption-msg", 2, 2u,
+                        sig_e, zy_ingress);
+            }
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-ipv4-consumption-msg", 2, 0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0E}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-consumption-msg", 2, 2u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x15}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x02},
+                        std::byte{0x01}, std::byte{0x02}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_url_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-url-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0A}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x05}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}});
+            {
+                std::vector<std::byte> zz_ingress;
+                zz_ingress.reserve(42u);
+                for (const unsigned b :
+                     {0x80u, 0x00u, 0x00u, 0x26u, 0x01u, 0x00u, 0x00u, 0x02u}) {
+                    zz_ingress.push_back(static_cast<std::byte>(b));
+                }
+                zz_ingress.insert(zz_ingress.end(), 34u, std::byte{0x00});
+                failures +=
+                    run_mmtp_signalling_prefix_with_plt_package_entry_ipv6_in_consumption_message(
+                        "mmtp-signalling-si-plt-package-ipv6-consumption-msg", 2,
+                        0x10u, sig_e, zz_ingress);
+            }
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_url_4_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-url4-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0E}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x05}, std::byte{0x04},
+                        std::byte{0x68}, std::byte{0x74}, std::byte{0x74},
+                        std::byte{0x70}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_url_3_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-url3-consumption-msg", 2, 0x10u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0D}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x05}, std::byte{0x03},
+                        std::byte{0x6C}, std::byte{0x61}, std::byte{0x62},
+                        std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-ipv4-nz-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x13}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x0A},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0xE0}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x13}, std::byte{0x88},
+                        std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-location-ipv4-nz-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x1E}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x01}, std::byte{0x0A}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0xE0},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x13}, std::byte{0x88}, std::byte{0x00},
+                        std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-ipv4-nz-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x0E}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x0A},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0xE0}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x01}, std::byte{0x13}, std::byte{0x88}});
+            {
+                std::vector<std::byte> aaj_ingress;
+                aaj_ingress.reserve(42u);
+                for (const unsigned b :
+                     {0x80u, 0x00u, 0x00u, 0x26u, 0x01u, 0x00u, 0x00u, 0x02u}) {
+                    aaj_ingress.push_back(static_cast<std::byte>(b));
+                }
+                const std::uint8_t tail[] = {
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0xff, 0xff, 0x0a, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe0, 0x00,
+                    0x00, 0x01, 0x13, 0x88};
+                for (const auto b : tail) {
+                    aaj_ingress.push_back(static_cast<std::byte>(b));
+                }
+                failures +=
+                    run_mmtp_signalling_prefix_with_plt_package_entry_ipv6_nz_in_consumption_message(
+                        "mmtp-signalling-si-plt-package-ipv6-nz-consumption-msg", 2,
+                        0x10u, sig_e, aaj_ingress);
+            }
+failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location0_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-location0-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x16}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv4-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x1f}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv4-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{std::byte{0x80}, std::byte{0x00}, std::byte{0x00}, std::byte{0x0f}, std::byte{0x01}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv4-nz-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{std::byte{0x80}, std::byte{0x00}, std::byte{0x00}, std::byte{0x0f}, std::byte{0x01}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x01}, std::byte{0x0a}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0xe0}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x13}, std::byte{0x88}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv4-nz-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x1f}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x0a}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0xe0}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x13}, std::byte{0x88}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv4-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x20}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x02}, std::byte{0x01}, std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv4-nz-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x20}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x02}, std::byte{0x01}, std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x01}, std::byte{0x0a}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0xe0}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x13}, std::byte{0x88}, std::byte{0x00}, std::byte{0x00}});
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_descriptors4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-descriptors4-consumption-msg", 2,
+                    2u, sig_e,
+                    std::vector<std::byte>{std::byte{0x20}, std::byte{0x01}, std::byte{0x00}, std::byte{0x19}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x02}, std::byte{0x01}, std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x04}, std::byte{0xde}, std::byte{0xad}, std::byte{0xbe}, std::byte{0xef}});
+            {
+                static const char *hx =
+                    "2001003700000000010000000000010100000000000102000000000000000000000000000000000000000000000000000000000000000000000000";
+                std::vector<std::byte> abu_id8_ipv6_ingress;
+                abu_id8_ipv6_ingress.reserve(59u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_id8_ipv6_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv6-consumption-msg", 2, 2u, sig_e,
+                    abu_id8_ipv6_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "80000027010001010200000000000000000000000000000000000000000000000000000000000000000000";
+                std::vector<std::byte> abu_plt_id8_ipv6_ingress;
+                abu_plt_id8_ipv6_ingress.reserve(43u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_plt_id8_ipv6_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv6-consumption-msg", 2, 0x10u, sig_e,
+                    abu_plt_id8_ipv6_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "2001003600000000010000000000000000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000";
+                std::vector<std::byte> abu_mpt_loc_ipv6_nz_ingress;
+                abu_mpt_loc_ipv6_nz_ingress.reserve(58u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_mpt_loc_ipv6_nz_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-location-ipv6-nz-consumption-msg", 2, 2u, sig_e,
+                    abu_mpt_loc_ipv6_nz_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "80000027010001010200000000000000000000ffff0a00000100000000000000000000ffffe00000011388";
+                std::vector<std::byte> abu_plt_id8_ipv6_nz_ingress;
+                abu_plt_id8_ipv6_nz_ingress.reserve(43u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_plt_id8_ipv6_nz_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv6-nz-consumption-msg", 2, 0x10u, sig_e,
+                    abu_plt_id8_ipv6_nz_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "200100370000000001000000000001010000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000";
+                std::vector<std::byte> abu_id8_ipv6_nz_ingress;
+                abu_id8_ipv6_nz_ingress.reserve(59u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_id8_ipv6_nz_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv6-nz-consumption-msg", 2, 2u, sig_e,
+                    abu_id8_ipv6_nz_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "2001003700000000010000000000020102000000000001020000000000000000000000000000000000000000000000000000000000000000000000";
+                std::vector<std::byte> abu_id16_ipv6_ingress;
+                abu_id16_ipv6_ingress.reserve(59u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_id16_ipv6_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv6-consumption-msg", 2, 2u, sig_e,
+                    abu_id16_ipv6_ingress);
+            }
+
+            {
+                static const char *hx =
+                    "20010038000000000100000000000201020000000000010200000000000000000000ffff0a00000100000000000000000000ffffe000000113880000";
+                std::vector<std::byte> abu_id16_ipv6_nz_ingress;
+                abu_id16_ipv6_nz_ingress.reserve(60u);
+                for (std::size_t i = 0; hx[i] != '\0'; i += 2) {
+                    const auto nyb = [](char c) -> unsigned {
+                        if (c >= '0' && c <= '9') {
+                            return static_cast<unsigned>(c - '0');
+                        }
+                        return static_cast<unsigned>(c - 'a' + 10);
+                    };
+                    abu_id16_ipv6_nz_ingress.push_back(static_cast<std::byte>(
+                        (nyb(hx[i]) << 4) | nyb(hx[i + 1])));
+                }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv6-nz-consumption-msg", 2, 2u, sig_e,
+                    abu_id16_ipv6_nz_ingress);
+            }
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_descriptors4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-id8-desc4-consumption-msg", 2, 2u,
+                    sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x20}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x18}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x04},
+                        std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE},
+                        std::byte{0xEF}});
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_delivery_info_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-plt-delivery-ipv4-consumption-msg", 2,
+                    0x10u, sig_e,
+                    std::vector<std::byte>{
+                        std::byte{0x80}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x13}, std::byte{0x00}, std::byte{0x01},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x01}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+                        std::byte{0x00}, std::byte{0x00}});
+            failures += run_mmtp_signalling_prefix_with_plt_consumption_message(
+                "mmtp-signalling-si-plt-consumption-msg", 2, 0x10u, sig_e,
+                std::vector<std::byte>{std::byte{0x80}, std::byte{0x00},
+                                       std::byte{0x00}, std::byte{0x02},
+                                       std::byte{0x00}, std::byte{0x00}});
             failures += run_mmtp_signalling_prefix_with_mpt_asset_in_message(
                 "mmtp-signalling-si-mpt-asset+msg", 2, 0x10u, sig_e,
                 std::vector<std::byte>{

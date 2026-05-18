@@ -48,3 +48,12 @@ fixtures:
       message_version: 0
       message_byte_length: 0
       payload_hex: ""
+
+  - name: mpt_minimal_table_body
+    description: "MPT message_id=16 (0x10), version=0, body is minimal mmt_si_mpt_table (9 B)"
+    raw_hex: "00 10 00 00 00 00 09 20 01 00 05 00 00 00 00 00"
+    expected:
+      message_id: 16
+      message_version: 0
+      message_byte_length: 9
+      payload_hex: "200100050000000000"

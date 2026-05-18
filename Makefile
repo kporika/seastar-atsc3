@@ -11,7 +11,7 @@
 #   make integ-all          # all host integ scripts (RTCM 12×96)
 #   make integ-stltp       # stltp:// lab UDP + strip + verify
 #   make integ-lct-word0    # gw --prepend-lct-word0 + mmt_probe verify strip
-#   make integ-mmtp-word0   # gw MMTP word-0 lab (E–AAT) + mmt_probe strip
+#   make integ-mmtp-word0   # gw MMTP word-0 lab (E–ADW) + mmt_probe strip
 #   make integ-lls         # lls:// Table 6.1 + gzip UDP + Python validate
 #
 # Quick start (zero local deps; everything runs in Docker):
@@ -24,7 +24,7 @@
 #   make image-integ-udp    # udp:// in the image
 #   make image-integ-admin  # PATCH /config in the image (needs python3)
 #   make image-integ-lct-word0 # M8 LCT word-0 prefix path in the image
-#   make image-integ-mmtp-word0 # M8 MMTP lab (scripts/mmtp_word0_integration_test.sh phases E–AAT) in the image
+#   make image-integ-mmtp-word0 # M8 MMTP lab (scripts/mmtp_word0_integration_test.sh phases E–ADW) in the image
 #   make image-integ-all    # full suite in the image (incl. RTCM 12×96)
 #   make image-integ-rtcm   # RTCM path only (12×96) in the image
 #   make image-integ-stltp     # STLTP lab UDP integration in the image
@@ -106,7 +106,7 @@ integ-rtcm:
 integ-admin:
 	./scripts/admin_patch_config_integration_test.sh
 
-# All integration scripts in one shot (incl. MMTP lab E–AAT; RTCM uses 12×96).
+# All integration scripts in one shot (incl. MMTP lab E–ADW; RTCM uses 12×96).
 integ-all:
 	./scripts/run_all_integration.sh
 

@@ -43,6 +43,8 @@
 //                            [--strip-mmtp-signalling-aggregate-count N]
 //                            [--expect-mmtp-signalling-aggregate-hex HEX ...]
 //                            [--strip-mmt-si-message-header-len32
+//                             [--expect-mmt-si-message-id N ...]
+//                             [--expect-mmt-si-message-version N ...]
 //                             [--expect-mmt-si-message-byte-length U32 ...]]
 //                            [--strip-mmt-si-length32-envelope
 //                             [--expect-mmt-si-body-byte-length U32 ...]]
@@ -471,6 +473,10 @@ struct opts {
     /// (**§10.3** consumption message prefix + body). **Outermost** SI lab layer vs **§10.2** envelope /
     /// **descriptor loop**.
     bool strip_mmt_si_message_header_len32 = false;
+    /// With **--strip-mmt-si-message-header-len32**: optional per-TLV **message_id** / **message_version**,
+    /// same count/order as **--expected-payloads** CSV entries.
+    std::vector<std::uint16_t> expect_mmt_si_message_ids;
+    std::vector<std::uint8_t> expect_mmt_si_message_versions;
     /// With **--strip-mmt-si-message-header-len32**: optional per-TLV **message_byte_length** (**BE32**),
     /// same count/order as **--expected-payloads** CSV entries.
     std::vector<std::uint32_t> expect_mmt_si_message_byte_lengths;
@@ -832,6 +838,22 @@ opts parse_args(int argc, char **argv) {
                 hex_to_bytes(std::string(next())));
         } else if (k == "--strip-mmt-si-message-header-len32") {
             o.strip_mmt_si_message_header_len32 = true;
+        } else if (k == "--expect-mmt-si-message-id") {
+            const auto v = next_uint();
+            if (v > 65535u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-message-id must be <= 65535");
+            }
+            o.expect_mmt_si_message_ids.push_back(
+                static_cast<std::uint16_t>(v));
+        } else if (k == "--expect-mmt-si-message-version") {
+            const auto v = next_uint();
+            if (v > 255u) {
+                throw std::runtime_error(
+                    "--expect-mmt-si-message-version must be <= 255");
+            }
+            o.expect_mmt_si_message_versions.push_back(
+                static_cast<std::uint8_t>(v));
         } else if (k == "--expect-mmt-si-message-byte-length") {
             o.expect_mmt_si_message_byte_lengths.push_back(
                 static_cast<std::uint32_t>(next_uint()));
@@ -1911,6 +1933,44 @@ int do_verify(const opts &o) {
         }
     }
 
+    if (!o.expect_mmt_si_message_ids.empty()) {
+        if (!o.strip_mmt_si_message_header_len32) {
+            std::cerr << "verify: --expect-mmt-si-message-id requires "
+                         "--strip-mmt-si-message-header-len32\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-message-id requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_message_ids.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-message-id values, got "
+                      << o.expect_mmt_si_message_ids.size() << "\n";
+            return 2;
+        }
+    }
+
+    if (!o.expect_mmt_si_message_versions.empty()) {
+        if (!o.strip_mmt_si_message_header_len32) {
+            std::cerr << "verify: --expect-mmt-si-message-version requires "
+                         "--strip-mmt-si-message-header-len32\n";
+            return 2;
+        }
+        if (expected_hex.empty()) {
+            std::cerr << "verify: --expect-mmt-si-message-version requires "
+                         "--expected-payloads\n";
+            return 2;
+        }
+        if (o.expect_mmt_si_message_versions.size() != expected_hex.size()) {
+            std::cerr << "verify: need " << expected_hex.size()
+                      << " --expect-mmt-si-message-version values, got "
+                      << o.expect_mmt_si_message_versions.size() << "\n";
+            return 2;
+        }
+    }
+
     if (!o.expect_mmt_si_message_byte_lengths.empty()) {
         if (!o.strip_mmt_si_message_header_len32) {
             std::cerr << "verify: --expect-mmt-si-message-byte-length requires "
@@ -2553,6 +2613,26 @@ int do_verify(const opts &o) {
                 std::cerr << "verify: TLV #" << idx
                           << " mmt_si_message_header_len32 decode: " << mhd.error << "\n";
                 return 1;
+            }
+            if (!o.expect_mmt_si_message_ids.empty()) {
+                const auto want = o.expect_mmt_si_message_ids[idx];
+                if (want != mhd.value.message_id) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_message_header_len32 message_id want "
+                              << want << " got " << mhd.value.message_id << "\n";
+                    return 1;
+                }
+            }
+            if (!o.expect_mmt_si_message_versions.empty()) {
+                const auto want = o.expect_mmt_si_message_versions[idx];
+                if (want != mhd.value.message_version) {
+                    std::cerr << "verify: TLV #" << idx
+                              << " mmt_si_message_header_len32 message_version want "
+                              << static_cast<unsigned>(want) << " got "
+                              << static_cast<unsigned>(mhd.value.message_version)
+                              << "\n";
+                    return 1;
+                }
             }
             if (!o.expect_mmt_si_message_byte_lengths.empty()) {
                 const auto want = o.expect_mmt_si_message_byte_lengths[idx];

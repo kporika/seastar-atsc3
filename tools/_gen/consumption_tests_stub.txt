@@ -1,0 +1,76 @@
+Unit tests: call each run_*_in_consumption_message with same payload vectors as +msg tests.
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location0_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-location0-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse ZT hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv4-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse ZW hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv4-consumption-msg", 2,
+                    0x10u, sig_e,
+                /* reuse ZX hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv6-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAA hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv6-consumption-msg", 2,
+                    0x10u, sig_e,
+                /* reuse AAB hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-location-ipv6-nz-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAH hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv4-nz-consumption-msg", 2,
+                    0x10u, sig_e,
+                /* reuse AAK hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_plt_package_entry_id8_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-plt-package-entry-id8-location-ipv6-nz-consumption-msg", 2,
+                    0x10u, sig_e,
+                /* reuse AAL hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv4-nz-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAM hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id8_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id8-location-ipv6-nz-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAN hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv4-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAO hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv4_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv4-nz-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAP hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv6-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAQ hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_location_ipv6_nz_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-location-ipv6-nz-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAR hex via +msg path in encoder_pipeline_test */);
+            failures +=
+                run_mmtp_signalling_prefix_with_mpt_asset_id16_descriptors4_in_consumption_message(
+                    "mmtp-signalling-si-mpt-asset-id16-descriptors4-consumption-msg", 2,
+                    2u, sig_e,
+                /* reuse AAS hex via +msg path in encoder_pipeline_test */);

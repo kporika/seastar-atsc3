@@ -92,7 +92,7 @@ atsc3_proto/
 ├── scripts/
 │   ├── _lib.sh               # resolve_bin + detect_default_build_dir (integration scripts)
 │   ├── lct_word0_integration_test.sh  # gw --prepend-lct-word0 + verify --strip-lct-word0 (M8)
-│   ├── mmtp_word0_integration_test.sh # gw MMTP lab (E–AAT: … + ISOBMFF FT=1 MFU + ALP pc/hm + MMT-SI §10.3 message header ZB + PA table index ZC + PA table body ZD + multi-table bodies ZE + mixed PA rows + SI tail ZF + MPT/PLT table wire ZG/ZH + body prefix ZI/ZJ + MPT asset ZK/ZS/AAG/AAH/AAI/AAJ/AAK/AAL/AAM/AAN/AAO/AAP/AAQ/AAR/AAS/AAT/ZT/ZV/ZW/ZY/AAA/AAC + PLT DeliveryInfo ZL/ZM/ZN/ZO/ZQ/AAD/AAE + PLT package entry ZP/ZR/ZU/ZX/ZZ/AAB + §10.2/§10.3 Y/Z/ZA + SI packet_id 0/1/2 lab V–X) + mmt_probe strip (M8)
+│   ├── mmtp_word0_integration_test.sh # gw MMTP lab (E–AEA: … + ISOBMFF FT=1 MFU + ALP pc/hm + MMT-SI §10.3 message header ZB + PA table index ZC + PA table body ZD + multi-table bodies ZE + mixed PA rows + SI tail ZF + MPT/PLT table wire ZG/ZH + body prefix ZI/ZJ + consumption PA+table twins ACN–ACQ + PA+MPT asset ACR–ACY + PA+PLT delivery/package ACZ–ADO + PA+MPT asset location ADP–ADW + PA+MPT/PLT tail ADX–AEA + MPT asset ZK/ZS/AAG/AAH/AAI/AAJ/AAK/AAL/AAM/AAN/AAO/AAP/AAQ/AAR/AAS/AAT/AAU/ZT/ZV/ZW/ZY/AAA/AAC + PLT DeliveryInfo ZL/ZM/ZN/ZO/ZQ/AAD/AAE + PLT package entry ZP/ZR/ZU/ZX/ZZ/AAB + §10.2/§10.3 Y/Z/ZA + SI packet_id 0/1/2 lab V–X) + mmt_probe strip (M8)
 │   ├── udp_integration_test.sh # same via udp:// sink + _udp_recv_concat.py
 │   ├── ipv4udp_file_integration_test.sh  # ipv4udp-file:// + m8 strip + verify
 │   ├── stltp_integration_test.sh  # stltp:// lab UDP + _stltp_lab_udp_to_tlvmux.py + verify
@@ -203,7 +203,7 @@ make integ-mmtp-word0                      # MMTP lab E–AAT + mmt_probe strip 
 make integ-lls                             # lls:// Table 6.1 + gzip validate (needs python3)
 make integ-admin                           # PATCH /config sink hot-swap (needs python3)
 make integ-rtcm                            # RTCM path (default 32×128 in script; pass frames/bytes as extra args)
-make integ-all                             # all host integ scripts (incl. MMTP E–AAT; RTCM 12×96)
+make integ-all                             # all host integ scripts (incl. MMTP E–AEA; RTCM 12×96)
 ```
 
 **No `build/gw/atsc3_gw` on the host?** (macOS or minimal trees often see **`Seastar not found`** from **`cmake`**.) Use the same Linux + Seastar setup the repo already ships: **`make deps`** once (**`atsc3-deps:latest`**), then **`make docker-ctest`** for **`ninja` + `ctest` + `codec_smoke`** inside that image, or **`make image`** and **`make image-integ-mmtp-word0`** / **`make image-integ-all`** to run **`scripts/mmtp_word0_integration_test.sh`** (phases **E**–**ZB**) and the other integration scripts against the **`atsc3-proto`** runtime image.
@@ -367,8 +367,8 @@ curl -sSf -X POST http://127.0.0.1:8080/ingest \
 ./scripts/integration_test.sh                              # defaults: ./build, else ./build-docker
 ./scripts/integration_test.sh /path/to/custom-build        # explicit build dir
 ./scripts/lct_word0_integration_test.sh                    # M8 LCT word-0 phases A–D
-./scripts/mmtp_word0_integration_test.sh                   # M8 MMTP phases E–AAT (needs built atsc3_gw)
-./scripts/run_all_integration.sh                           # integration + UDP/IPv4UDP/STLTP/LLS/admin/M7 + LCT A–D + MMTP E–AAT + RTCM (12×96)
+./scripts/mmtp_word0_integration_test.sh                   # M8 MMTP phases E–AEA (needs built atsc3_gw)
+./scripts/run_all_integration.sh                           # integration + UDP/IPv4UDP/STLTP/LLS/admin/M7 + LCT A–D + MMTP E–AEA + RTCM (12×96)
 make integ-all                                             # Makefile wrapper → run_all_integration.sh
 # Each single-script harness spawns gw, runs mmt_probe send + verify against a temp sink,
 # then tears gw down (exit 0 on success). run_all_integration.sh chains them in fixed order.

@@ -31,6 +31,7 @@
 #include "mmt_si_mpt_asset_id8_descriptors4_decoder.h"
 #include "mmt_si_mpt_table_body_prefix_decoder.h"
 #include "mmt_si_mpt_table_decoder.h"
+#include "mmt_si_pa_table_headers_decoder.h"
 #include "mmt_si_pa_table_headers_encoder.h"
 #include "mmt_si_plt_delivery_info_decoder.h"
 #include "mmt_si_plt_delivery_info_ipv4_decoder.h"
@@ -116,6 +117,61 @@ inline void append_u32_be(std::vector<std::byte>* out, std::uint32_t x) noexcept
         return k_rfc5651_word0_octets + sizeof(std::uint32_t);
     }
     return std::nullopt;
+}
+
+/// **`validate_mmt_si_*_table_body`** on a **§10.3** consumption message: ingress
+/// may be **table-only** (gateway does not prepend PA) or **PA index || table**
+/// (ACN-style lab). Try a full-span table decode first; peel PA only when that
+/// fails and a **PA || table** composite decodes cleanly.
+struct ingress_table_validate_view {
+    std::span<const std::byte> table_bytes;
+    bool                         ok = true;
+    std::string                  error;
+};
+
+using si_table_ingress_probe = bool (*)(std::span<const std::byte>);
+
+[[nodiscard]] bool mpt_table_fully_decodes(std::span<const std::byte> s) {
+    const auto d = atsc3::mmt_si_mpt_table::decode(s);
+    return d.ok && d.bytes_consumed == s.size();
+}
+
+[[nodiscard]] bool plt_table_fully_decodes(std::span<const std::byte> s) {
+    const auto d = atsc3::mmt_si_plt_table::decode(s);
+    return d.ok && d.bytes_consumed == s.size();
+}
+
+[[nodiscard]] ingress_table_validate_view ingress_for_si_table_validate(
+    std::span<const std::byte>        payload,
+    const encoder_pipeline::config& cfg,
+    si_table_ingress_probe            probe) {
+    ingress_table_validate_view view{payload, true, {}};
+    if (cfg.prepend_mmt_si_pa_table_headers || probe(payload)) {
+        return view;
+    }
+    if (!cfg.prepend_mmt_si_message_header_len32) {
+        return view;
+    }
+    const auto pah = atsc3::mmt_si_pa_table_headers::decode(payload);
+    if (!pah.ok) {
+        view.ok    = false;
+        view.error = pah.error;
+        return view;
+    }
+    if (pah.bytes_consumed >= payload.size()) {
+        view.ok    = false;
+        view.error = "PA table index consumed entire ingress";
+        return view;
+    }
+    const auto after = payload.subspan(pah.bytes_consumed);
+    if (!probe(after)) {
+        view.ok    = false;
+        view.error =
+            "ingress is neither a sole MMT-SI table nor PA index + table body";
+        return view;
+    }
+    view.table_bytes = after;
+    return view;
 }
 }  // namespace
 
@@ -266,17 +322,25 @@ encoder_pipeline::result encoder_pipeline::encode(
     }
 
     if (_cfg.validate_mmt_si_mpt_table_body) {
-        auto mpt = atsc3::mmt_si_mpt_table::decode(payload);
+        const auto view =
+            ingress_for_si_table_validate(payload, _cfg, mpt_table_fully_decodes);
+        if (!view.ok) {
+            r.error = "encoder_pipeline: mmt_si_mpt_table ingress layout: " +
+                      view.error;
+            return r;
+        }
+        const auto table_payload = view.table_bytes;
+        auto       mpt           = atsc3::mmt_si_mpt_table::decode(table_payload);
         if (!mpt.ok) {
             r.error = "encoder_pipeline: mmt_si_mpt_table decode failed: " +
                       mpt.error;
             return r;
         }
-        if (mpt.bytes_consumed != payload.size()) {
+        if (mpt.bytes_consumed != table_payload.size()) {
             r.error =
                 "encoder_pipeline: mmt_si_mpt_table decode consumed " +
                 std::to_string(mpt.bytes_consumed) + " of " +
-                std::to_string(payload.size()) + " ingress octets";
+                std::to_string(table_payload.size()) + " ingress octets";
             return r;
         }
         if (mpt.value.table_id != 32u) {
@@ -3461,17 +3525,25 @@ encoder_pipeline::result encoder_pipeline::encode(
     }
 
     if (_cfg.validate_mmt_si_plt_table_body) {
-        auto plt = atsc3::mmt_si_plt_table::decode(payload);
+        const auto view =
+            ingress_for_si_table_validate(payload, _cfg, plt_table_fully_decodes);
+        if (!view.ok) {
+            r.error = "encoder_pipeline: mmt_si_plt_table ingress layout: " +
+                      view.error;
+            return r;
+        }
+        const auto table_payload = view.table_bytes;
+        auto       plt           = atsc3::mmt_si_plt_table::decode(table_payload);
         if (!plt.ok) {
             r.error = "encoder_pipeline: mmt_si_plt_table decode failed: " +
                       plt.error;
             return r;
         }
-        if (plt.bytes_consumed != payload.size()) {
+        if (plt.bytes_consumed != table_payload.size()) {
             r.error =
                 "encoder_pipeline: mmt_si_plt_table decode consumed " +
                 std::to_string(plt.bytes_consumed) + " of " +
-                std::to_string(payload.size()) + " ingress octets";
+                std::to_string(table_payload.size()) + " ingress octets";
             return r;
         }
         if (plt.value.table_id != 128u) {

@@ -4,7 +4,7 @@
 # Run all host-side integration scripts; default BUILD_DIR prefers ./build
 # then ./build-docker (built gw), unless ATSC3_BUILD_DIR is set — see _lib.sh.
 # Order: integration_test → udp → ipv4udp_file → stltp → lls → admin_patch_config
-# → m7_operator → lct_word0 → mmtp_word0 (phases E–AAT) → rtcm (12×96).
+# → m7_operator → lct_word0 → mmtp_word0 (phases E–AEA) → rtcm (12×96).
 # RTCM leg uses a smaller frame count than rtcm_integration_test.sh defaults
 # so local/CI-adjacent runs stay quick.
 #
